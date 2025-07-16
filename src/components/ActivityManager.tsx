@@ -12,6 +12,46 @@ import {
 import { Timestamp } from 'firebase/firestore';
 import type { Activity, ActivityStatus } from '../types';
 
+// Helper function to convert various date formats to Date object
+const safeDateConversion = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // Handle Cloud Functions timestamp format: {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && '_seconds' in dateValue) {
+    return new Date(dateValue._seconds * 1000 + Math.floor(dateValue._nanoseconds / 1000000));
+  }
+  
+  // Handle legacy timestamp format: {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && 'seconds' in dateValue) {
+    return new Date(dateValue.seconds * 1000 + Math.floor(dateValue.nanoseconds / 1000000));
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      const date = dateValue.toDate();
+      return isNaN(date.getTime()) ? new Date() : date;
+    } catch (error) {
+      console.error('Error converting timestamp with toDate method:', error);
+      return new Date();
+    }
+  }
+  
+  // If it's a string or number, parse it
+  try {
+    const parsedDate = new Date(dateValue);
+    return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return new Date();
+  }
+};
+
 interface ActivityManagerProps {
   activity: Activity;
   opportunityId: string;
@@ -122,11 +162,11 @@ export const ActivityManager: React.FC<ActivityManagerProps> = ({
             <div className="flex flex-wrap gap-4 text-sm text-gray-600">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
-                {activity.dateTime.toDate().toLocaleDateString()}
+                {safeDateConversion(activity.dateTime).toLocaleDateString()}
               </span>
               <span className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                {activity.dateTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {safeDateConversion(activity.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
               <span className="capitalize">{activity.activityType} • {activity.method}</span>
             </div>

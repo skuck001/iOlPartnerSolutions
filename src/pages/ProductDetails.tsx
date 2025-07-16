@@ -17,12 +17,14 @@ import {
   Network,
   Briefcase
 } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
 import type { Product, Account, Contact, ContactType, Opportunity } from '../types';
-import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument, updateProductWithSync, deleteProductWithSync } from '../lib/firestore';
 import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
+import { useProductsApi } from '../hooks/useProductsApi';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 
 const PRODUCT_CATEGORIES = [
   'Business Intelligence',
@@ -57,11 +59,33 @@ export const ProductDetails: React.FC = () => {
   const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
+  // API hooks
+  const { 
+    getProduct, 
+    createProduct, 
+    updateProduct, 
+    deleteProduct,
+    loading: productsLoading 
+  } = useProductsApi();
+  
+  const { 
+    accounts,
+    loading: accountsLoading 
+  } = useAccountsApi();
+  
+  const { 
+    contacts, 
+    createContact,
+    loading: contactsLoading 
+  } = useContactsApi();
+  
+  const { 
+    opportunities,
+    loading: opportunitiesLoading 
+  } = useOpportunitiesApi();
+  
   const [product, setProduct] = useState<Product | null>(null);
   const [account, setAccount] = useState<Account | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -105,50 +129,51 @@ export const ProductDetails: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [accountsData, contactsData, opportunitiesData] = await Promise.all([
-        getDocuments('accounts'),
-        getDocuments('contacts'),
-        getDocuments('opportunities')
-      ]);
-      setAccounts(accountsData as Account[]);
-      setContacts(contactsData as Contact[]);
-      setOpportunities(opportunitiesData as Opportunity[]);
-
       if (!isNew && id && id !== 'new') {
-        const productData = await getDocument('products', id);
+        const productData = await getProduct(id);
         if (productData) {
-          const productTyped = productData as Product;
-          setProduct(productTyped);
+          setProduct(productData);
           setFormData({
-            name: productTyped.name,
-            accountId: productTyped.accountId,
-            category: productTyped.category,
-            subcategory: productTyped.subcategory,
-            description: productTyped.description || '',
-            version: productTyped.version || '',
-            status: productTyped.status,
-            website: productTyped.website || '',
-            contactIds: productTyped.contactIds || [],
-            tags: productTyped.tags || [],
-            targetMarket: productTyped.targetMarket || '',
-            pricing: productTyped.pricing || '',
-            notes: productTyped.notes || '',
-            ownerId: productTyped.ownerId || currentUser?.uid || ''
+            name: productData.name,
+            accountId: productData.accountId,
+            category: productData.category,
+            subcategory: productData.subcategory,
+            description: productData.description || '',
+            version: productData.version || '',
+            status: productData.status,
+            website: productData.website || '',
+            contactIds: productData.contactIds || [],
+            tags: productData.tags || [],
+            targetMarket: productData.targetMarket || '',
+            pricing: productData.pricing || '',
+            notes: productData.notes || '',
+            ownerId: productData.ownerId || currentUser?.uid || ''
           });
-          
-          // Find the account
-          const relatedAccount = accountsData.find((acc: any) => acc.id === productTyped.accountId);
-          if (relatedAccount) {
-            setAccount(relatedAccount as Account);
-          }
         }
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching product data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!productsLoading && !accountsLoading && !contactsLoading && !opportunitiesLoading) {
+      setLoading(false);
+    }
+  }, [productsLoading, accountsLoading, contactsLoading, opportunitiesLoading]);
+
+  // Update account when accountId changes
+  useEffect(() => {
+    if (formData.accountId) {
+      const selectedAccount = accounts.find(a => a.id === formData.accountId);
+      setAccount(selectedAccount || null);
+    } else {
+      setAccount(null);
+    }
+  }, [formData.accountId, accounts]);
 
   const getAccountName = (accountId: string) => {
     const account = accounts.find(a => a.id === accountId);
@@ -165,33 +190,31 @@ export const ProductDetails: React.FC = () => {
         Object.entries(formData).filter(([_, value]) => value !== undefined && value !== '')
       );
 
-      const submitData: any = {
-        ...cleanData,
-        createdAt: isNew ? Timestamp.now() : product?.createdAt,
-        updatedAt: Timestamp.now()
-      };
-
-      console.log('Saving product:', { isNew, id, submitData });
+      console.log('Saving product:', { isNew, id, formData: cleanData });
 
       if (isNew || !id) {
-        const docId = await createDocument('products', submitData);
-        console.log('Product created with ID:', docId);
-        
-        // For new products, sync the contact relationships
-        if (submitData.contactIds && submitData.contactIds.length > 0) {
-          const newDocRef = await getDocument('products', docId.id);
-          if (newDocRef) {
-            await updateProductWithSync(docId.id, { contactIds: submitData.contactIds }, []);
-          }
-        }
-        
+        const newProduct = await createProduct({
+          name: cleanData.name as string,
+          accountId: cleanData.accountId as string,
+          category: cleanData.category as Product['category'],
+          subcategory: cleanData.subcategory as Product['subcategory'],
+          description: cleanData.description,
+          version: cleanData.version,
+          status: cleanData.status as Product['status'],
+          website: cleanData.website,
+          contactIds: cleanData.contactIds || [],
+          tags: cleanData.tags || [],
+          targetMarket: cleanData.targetMarket,
+          pricing: cleanData.pricing,
+          notes: cleanData.notes,
+          ownerId: cleanData.ownerId as string
+        });
+        console.log('Product created:', newProduct);
         navigate('/products');
       } else {
-        // For existing products, use synchronized update
-        const previousContactIds = product?.contactIds || [];
-        await updateProductWithSync(id, submitData, previousContactIds);
-        console.log('Product updated successfully with synced relationships');
-        await fetchData();
+        const updatedProduct = await updateProduct(id, cleanData);
+        console.log('Product updated:', updatedProduct);
+        setProduct(updatedProduct);
       }
     } catch (error) {
       console.error('Error saving product:', error);
@@ -204,10 +227,11 @@ export const ProductDetails: React.FC = () => {
   const handleDelete = async () => {
     if (product && id && confirm('Are you sure you want to delete this product?')) {
       try {
-        await deleteProductWithSync(id);
+        await deleteProduct(id);
         navigate('/products');
       } catch (error) {
         console.error('Error deleting product:', error);
+        alert('Error deleting product. Please try again.');
       }
     }
   };
@@ -229,10 +253,10 @@ export const ProductDetails: React.FC = () => {
           contactType: 'Primary' as ContactType,
           productIds: [],
           ownerId: currentUser?.uid || '',
-          createdAt: Timestamp.now()
+          createdAt: new Date()
         };
         
-        const docRef = await createDocument('contacts', contactData);
+        const docRef = await createContact(contactData);
         
         // Refresh contacts and add to product
         await fetchData();
@@ -740,7 +764,29 @@ export const ProductDetails: React.FC = () => {
                       {product?.createdAt && (
                         <div>
                           <span className="text-gray-500">Created:</span>
-                          <p className="text-gray-900">{format(product.createdAt.toDate(), 'MMM d, yyyy')}</p>
+                          <p className="text-gray-900">{(() => {
+                            try {
+                              const timestamp = product.createdAt;
+                              let date: Date;
+                              
+                              if ((timestamp as any)?.seconds) {
+                                date = new Date((timestamp as any).seconds * 1000);
+                              } else if (timestamp) {
+                                date = new Date(timestamp);
+                              } else {
+                                return 'N/A';
+                              }
+                              
+                              if (isNaN(date.getTime())) {
+                                return 'Invalid Date';
+                              }
+                              
+                              return format(date, 'MMM d, yyyy');
+                            } catch (error) {
+                              console.error('Date formatting error:', error, product.createdAt);
+                              return 'N/A';
+                            }
+                          })()}</p>
                         </div>
                       )}
                       <div>

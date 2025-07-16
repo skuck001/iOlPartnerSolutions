@@ -22,12 +22,14 @@ import {
   CheckCircle,
   AlertTriangle
 } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
 import type { Contact, Account, Product, ContactType, Opportunity, Activity as ActivityType, ActivityStatus } from '../types';
-import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument, updateContactWithSync, deleteContactWithSync } from '../lib/firestore';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useProductsApi } from '../hooks/useProductsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 
 const contactTypes: ContactType[] = [
   'Primary',
@@ -46,10 +48,31 @@ export const ContactDetails: React.FC = () => {
   const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
+  // API hooks
+  const { 
+    getContact, 
+    createContact, 
+    updateContact, 
+    deleteContact,
+    loading: contactsLoading 
+  } = useContactsApi();
+  
+  const { 
+    accounts,
+    loading: accountsLoading 
+  } = useAccountsApi();
+  
+  const { 
+    products,
+    loading: productsLoading 
+  } = useProductsApi();
+  
+  const { 
+    opportunities,
+    loading: opportunitiesLoading 
+  } = useOpportunitiesApi();
+  
   const [contact, setContact] = useState<Contact | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [contactActivities, setContactActivities] = useState<ActivityType[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,48 +108,49 @@ export const ContactDetails: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [accountsData, productsData, opportunitiesData] = await Promise.all([
-        getDocuments('accounts'),
-        getDocuments('products'),
-        getDocuments('opportunities')
-      ]);
-      setAccounts(accountsData as Account[]);
-      setProducts(productsData as Product[]);
-      setOpportunities(opportunitiesData as Opportunity[]);
-
       if (!isNew && id && id !== 'new') {
-        const contactData = await getDocument('contacts', id);
+        const contactData = await getContact(id);
         if (contactData) {
-          const contactTyped = contactData as Contact;
-          setContact(contactTyped);
+          setContact(contactData);
           setFormData({
-            name: contactTyped.name,
-            email: contactTyped.email,
-            phone: contactTyped.phone || '',
-            position: contactTyped.position || '',
-            department: contactTyped.department || '',
-            contactType: contactTyped.contactType,
-            accountId: contactTyped.accountId,
-            productIds: contactTyped.productIds || [],
-            linkedIn: contactTyped.linkedIn || '',
-            timezone: contactTyped.timezone || '',
-            preferredContactMethod: contactTyped.preferredContactMethod || 'Email',
-            isDecisionMaker: contactTyped.isDecisionMaker || false,
-            notes: contactTyped.notes || '',
-            ownerId: contactTyped.ownerId || currentUser?.uid || ''
+            name: contactData.name,
+            email: contactData.email,
+            phone: contactData.phone || '',
+            position: contactData.position || '',
+            department: contactData.department || '',
+            contactType: contactData.contactType,
+            accountId: contactData.accountId,
+            productIds: contactData.productIds || [],
+            linkedIn: contactData.linkedIn || '',
+            timezone: contactData.timezone || '',
+            preferredContactMethod: contactData.preferredContactMethod || 'Email',
+            isDecisionMaker: contactData.isDecisionMaker || false,
+            notes: contactData.notes || '',
+            ownerId: contactData.ownerId || currentUser?.uid || ''
           });
-
-          // Extract activities related to this contact
-          const relatedActivities = extractContactActivities(opportunitiesData as Opportunity[], id);
-          setContactActivities(relatedActivities);
         }
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching contact data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!contactsLoading && !accountsLoading && !productsLoading && !opportunitiesLoading) {
+      setLoading(false);
+    }
+  }, [contactsLoading, accountsLoading, productsLoading, opportunitiesLoading]);
+
+  // Extract activities related to this contact from opportunities
+  useEffect(() => {
+    if (!isNew && id && opportunities.length > 0) {
+      const relatedActivities = extractContactActivities(opportunities, id);
+      setContactActivities(relatedActivities);
+    }
+  }, [opportunities, id, isNew]);
 
   // Helper function to extract activities related to a specific contact
   const extractContactActivities = (opportunities: Opportunity[], contactId: string): ActivityType[] => {
@@ -147,7 +171,16 @@ export const ContactDetails: React.FC = () => {
     });
     
     // Sort activities by date (newest first)
-    return activities.sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis());
+    return activities.sort((a, b) => {
+      try {
+        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
+        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+        return timeB - timeA;
+      } catch (error) {
+        console.error('Date sorting error:', error);
+        return 0;
+      }
+    });
   };
 
   const getAccountName = (accountId: string) => {
@@ -192,33 +225,31 @@ export const ContactDetails: React.FC = () => {
         Object.entries(formData).filter(([_, value]) => value !== undefined && value !== '')
       );
 
-      const submitData: any = {
-        ...cleanData,
-        createdAt: isNew ? Timestamp.now() : contact?.createdAt,
-        updatedAt: Timestamp.now()
-      };
-
-      console.log('Saving contact:', { isNew, id, submitData });
+      console.log('Saving contact:', { isNew, id, formData: cleanData });
 
       if (isNew || !id) {
-        const docId = await createDocument('contacts', submitData);
-        console.log('Contact created with ID:', docId);
-        
-        // For new contacts, sync the product relationships
-        if (submitData.productIds && submitData.productIds.length > 0) {
-          const newDocRef = await getDocument('contacts', docId.id);
-          if (newDocRef) {
-            await updateContactWithSync(docId.id, { productIds: submitData.productIds }, []);
-          }
-        }
-        
+        const newContact = await createContact({
+          name: cleanData.name as string,
+          email: cleanData.email as string,
+          phone: cleanData.phone,
+          position: cleanData.position,
+          department: cleanData.department,
+          contactType: cleanData.contactType as ContactType,
+          accountId: cleanData.accountId as string,
+          productIds: cleanData.productIds || [],
+          linkedIn: cleanData.linkedIn,
+          timezone: cleanData.timezone,
+          preferredContactMethod: cleanData.preferredContactMethod as any,
+          isDecisionMaker: cleanData.isDecisionMaker,
+          notes: cleanData.notes,
+          ownerId: cleanData.ownerId as string
+        });
+        console.log('Contact created:', newContact);
         navigate('/contacts');
       } else {
-        // For existing contacts, use synchronized update
-        const previousProductIds = contact?.productIds || [];
-        await updateContactWithSync(id, submitData, previousProductIds);
-        console.log('Contact updated successfully with synced relationships');
-        await fetchData();
+        const updatedContact = await updateContact(id, cleanData);
+        console.log('Contact updated:', updatedContact);
+        setContact(updatedContact);
       }
     } catch (error) {
       console.error('Error saving contact:', error);
@@ -231,10 +262,11 @@ export const ContactDetails: React.FC = () => {
   const handleDelete = async () => {
     if (contact && id && confirm('Are you sure you want to delete this contact?')) {
       try {
-        await deleteContactWithSync(id);
+        await deleteContact(id);
         navigate('/contacts');
       } catch (error) {
         console.error('Error deleting contact:', error);
+        alert('Error deleting contact. Please try again.');
       }
     }
   };
@@ -531,7 +563,37 @@ export const ContactDetails: React.FC = () => {
                       {contact?.createdAt && (
                         <div>
                           <span className="text-gray-500">Created:</span>
-                          <p className="text-gray-900">{format(contact.createdAt.toDate(), 'MMM d, yyyy')}</p>
+                          <p className="text-gray-900">{(() => {
+                            try {
+                              const timestamp = contact.createdAt;
+                              let date: Date;
+                              
+                              if ((timestamp as any)?.toDate) {
+                                // Firestore Timestamp
+                                date = (timestamp as any).toDate();
+                              } else if ((timestamp as any)?._seconds) {
+                                // Cloud Functions timestamp format {_seconds: number, _nanoseconds: number}
+                                date = new Date((timestamp as any)._seconds * 1000);
+                              } else if ((timestamp as any)?.seconds) {
+                                // Legacy Firestore format {seconds: number}
+                                date = new Date((timestamp as any).seconds * 1000);
+                              } else if (timestamp) {
+                                // Regular date string or Date object
+                                date = new Date(timestamp);
+                              } else {
+                                return 'N/A';
+                              }
+                              
+                              if (isNaN(date.getTime())) {
+                                return 'Invalid Date';
+                              }
+                              
+                              return format(date, 'MMM d, yyyy');
+                            } catch (error) {
+                              console.error('Date formatting error:', error, contact.createdAt);
+                              return 'N/A';
+                            }
+                          })()}</p>
                         </div>
                       )}
                       <div>
@@ -549,9 +611,61 @@ export const ContactDetails: React.FC = () => {
                       {contact?.lastContactDate && (
                         <div>
                           <span className="text-gray-500">Last Contact:</span>
-                          <p className="text-gray-900">{format(contact.lastContactDate.toDate(), 'MMM d, yyyy')}</p>
+                          <p className="text-gray-900">{(() => {
+                            try {
+                              const timestamp = contact.lastContactDate;
+                              let date: Date;
+                              
+                              if ((timestamp as any)?.toDate) {
+                                // Firestore Timestamp
+                                date = (timestamp as any).toDate();
+                              } else if ((timestamp as any)?._seconds) {
+                                // Cloud Functions timestamp format {_seconds: number, _nanoseconds: number}
+                                date = new Date((timestamp as any)._seconds * 1000);
+                              } else if ((timestamp as any)?.seconds) {
+                                // Legacy Firestore format {seconds: number}
+                                date = new Date((timestamp as any).seconds * 1000);
+                              } else if (timestamp) {
+                                // Regular date string or Date object
+                                date = new Date(timestamp);
+                              } else {
+                                return 'N/A';
+                              }
+                              
+                              if (isNaN(date.getTime())) {
+                                return 'Invalid Date';
+                              }
+                              
+                              return format(date, 'MMM d, yyyy');
+                            } catch (error) {
+                              console.error('Date formatting error:', error, contact.lastContactDate);
+                              return 'N/A';
+                            }
+                          })()}</p>
                           <p className="text-xs text-gray-500">
-                            {formatDistanceToNow(contact.lastContactDate.toDate(), { addSuffix: true })}
+                            {(() => {
+                              try {
+                                const timestamp = contact.lastContactDate;
+                                let date: Date;
+                                
+                                if ((timestamp as any)?.seconds) {
+                                  date = new Date((timestamp as any).seconds * 1000);
+                                } else if (timestamp) {
+                                  date = new Date(timestamp);
+                                } else {
+                                  return 'N/A';
+                                }
+                                
+                                if (isNaN(date.getTime())) {
+                                  return 'Invalid Date';
+                                }
+                                
+                                return formatDistanceToNow(date, { addSuffix: true });
+                              } catch (error) {
+                                console.error('Date formatting error:', error, contact.lastContactDate);
+                                return 'N/A';
+                              }
+                            })()}
                           </p>
                         </div>
                       )}
@@ -565,7 +679,34 @@ export const ContactDetails: React.FC = () => {
                               <span className="text-gray-500">Latest Activity:</span>
                               <p className="text-gray-900">{latestCompleted.subject}</p>
                               <p className="text-xs text-gray-500">
-                                {formatDistanceToNow(latestCompleted.completedAt?.toDate() || latestCompleted.dateTime.toDate(), { addSuffix: true })}
+                                {(() => {
+                        try {
+                          let date: Date;
+                          if (latestCompleted.completedAt) {
+                            const completedAt = latestCompleted.completedAt;
+                            if ((completedAt as any)?.toDate) {
+                              date = (completedAt as any).toDate();
+                            } else if ((completedAt as any)?._seconds) {
+                              date = new Date((completedAt as any)._seconds * 1000);
+                            } else {
+                              date = new Date(completedAt);
+                            }
+                          } else {
+                            const dateTime = latestCompleted.dateTime;
+                            if ((dateTime as any)?.toDate) {
+                              date = (dateTime as any).toDate();
+                            } else if ((dateTime as any)?._seconds) {
+                              date = new Date((dateTime as any)._seconds * 1000);
+                            } else {
+                              date = new Date(dateTime);
+                            }
+                          }
+                          return formatDistanceToNow(date, { addSuffix: true });
+                        } catch (error) {
+                          console.error('Date formatting error:', error, latestCompleted);
+                          return 'N/A';
+                        }
+                      })()}
                               </p>
                             </div>
                           );
@@ -645,7 +786,25 @@ export const ContactDetails: React.FC = () => {
                 <div className="space-y-4">
                   {contactActivities.map((activity, index) => {
                     const ActivityIcon = getActivityIcon(activity.activityType);
-                    const isOverdue = activity.status === 'Scheduled' && activity.dateTime.toDate() < new Date();
+                    const isOverdue = activity.status === 'Scheduled' && (() => {
+                      try {
+                        const dateTime = activity.dateTime;
+                        let date: Date;
+                        
+                        if ((dateTime as any)?.toDate) {
+                          date = (dateTime as any).toDate();
+                        } else if ((dateTime as any)?._seconds) {
+                          date = new Date((dateTime as any)._seconds * 1000);
+                        } else {
+                          date = new Date(dateTime);
+                        }
+                        
+                        return date < new Date();
+                      } catch (error) {
+                        console.error('Date comparison error:', error, activity.dateTime);
+                        return false;
+                      }
+                    })();
                     
                     return (
                       <div key={`${activity.id}-${index}`} className="relative flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-b-0 last:pb-0">
@@ -686,7 +845,32 @@ export const ContactDetails: React.FC = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-500">
-                                {formatDistanceToNow(activity.dateTime.toDate(), { addSuffix: true })}
+                                {(() => {
+                              try {
+                                const dateTime = activity.dateTime;
+                                let date: Date;
+                                
+                                if ((dateTime as any)?.toDate) {
+                                  // Firestore Timestamp
+                                  date = (dateTime as any).toDate();
+                                } else if ((dateTime as any)?._seconds) {
+                                  // Cloud Functions timestamp format {_seconds: number, _nanoseconds: number}
+                                  date = new Date((dateTime as any)._seconds * 1000);
+                                } else {
+                                  // Regular date string or Date object
+                                  date = new Date(dateTime);
+                                }
+                                
+                                if (isNaN(date.getTime())) {
+                                  return 'Invalid Date';
+                                }
+                                
+                                return formatDistanceToNow(date, { addSuffix: true });
+                              } catch (error) {
+                                console.error('Date formatting error:', error, activity.dateTime);
+                                return 'N/A';
+                              }
+                            })()}
                               </span>
                               <Link
                                 to={`/opportunities/${(activity as any).opportunityId}`}
@@ -701,7 +885,32 @@ export const ContactDetails: React.FC = () => {
                           <div className="flex items-center gap-4 text-xs text-gray-600 mb-2">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {format(activity.dateTime.toDate(), 'MMM d, yyyy • h:mm a')}
+                              {(() => {
+                              try {
+                                const dateTime = activity.dateTime;
+                                let date: Date;
+                                
+                                if ((dateTime as any)?.toDate) {
+                                  // Firestore Timestamp
+                                  date = (dateTime as any).toDate();
+                                } else if ((dateTime as any)?._seconds) {
+                                  // Cloud Functions timestamp format {_seconds: number, _nanoseconds: number}
+                                  date = new Date((dateTime as any)._seconds * 1000);
+                                } else {
+                                  // Regular date string or Date object
+                                  date = new Date(dateTime);
+                                }
+                                
+                                if (isNaN(date.getTime())) {
+                                  return 'Invalid Date';
+                                }
+                                
+                                return format(date, 'MMM d, yyyy • h:mm a');
+                              } catch (error) {
+                                console.error('Date formatting error:', error, activity.dateTime);
+                                return 'N/A';
+                              }
+                            })()}
                             </span>
                             <span className="flex items-center gap-1">
                               <Package className="h-3 w-3" />
@@ -721,7 +930,23 @@ export const ContactDetails: React.FC = () => {
                           {activity.completedAt && (
                             <div className="flex items-center gap-2 text-xs text-green-700 mt-2">
                               <CheckCircle className="h-3 w-3" />
-                              Completed: {format(activity.completedAt.toDate(), 'MMM d, yyyy • h:mm a')}
+                              Completed: {(() => {
+                                try {
+                                  const completedAt = activity.completedAt;
+                                  let date: Date;
+                            if ((completedAt as any)?.toDate) {
+                              date = (completedAt as any).toDate();
+                            } else if ((completedAt as any)?._seconds) {
+                              date = new Date((completedAt as any)._seconds * 1000);
+                            } else {
+                              date = new Date(completedAt);
+                            }
+                                  return format(date, 'MMM d, yyyy • h:mm a');
+                                } catch (error) {
+                                  console.error('Date formatting error:', error, activity.completedAt);
+                                  return 'N/A';
+                                }
+                              })()}
                             </div>
                           )}
                         </div>

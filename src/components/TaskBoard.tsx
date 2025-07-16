@@ -3,6 +3,46 @@ import type { TaskStatus, ActivityStatus } from '../types';
 import { format } from 'date-fns';
 import { Clock, User, CheckCircle } from 'lucide-react';
 
+// Helper function to convert various date formats to Date object
+const safeDateConversion = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // Handle Cloud Functions timestamp format: {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && '_seconds' in dateValue) {
+    return new Date(dateValue._seconds * 1000 + Math.floor(dateValue._nanoseconds / 1000000));
+  }
+  
+  // Handle legacy timestamp format: {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && 'seconds' in dateValue) {
+    return new Date(dateValue.seconds * 1000 + Math.floor(dateValue.nanoseconds / 1000000));
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      const date = dateValue.toDate();
+      return isNaN(date.getTime()) ? new Date() : date;
+    } catch (error) {
+      console.error('Error converting timestamp with toDate method:', error);
+      return new Date();
+    }
+  }
+  
+  // If it's a string or number, parse it
+  try {
+    const parsedDate = new Date(dateValue);
+    return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return new Date();
+  }
+};
+
 // Generic task interface that works with both Task and EnhancedTask
 interface TaskLike {
   id: string;
@@ -107,7 +147,7 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                   <div className="flex items-center justify-between text-sm text-gray-500">
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {format(task.dueDate.toDate(), 'MMM d')}
+                      {format(safeDateConversion(task.dueDate), 'MMM d')}
                     </div>
                     <div className="flex items-center gap-1">
                       <User className="h-3 w-3" />

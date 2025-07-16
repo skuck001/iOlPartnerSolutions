@@ -4,8 +4,11 @@ import type { Task, TaskStatus, Opportunity, Activity, ActivityStatus, Account, 
 import { ListView } from '../components/ListView';
 import { TaskBoard } from '../components/TaskBoard';
 import { ActivityManager } from '../components/ActivityManager';
-import { getDocuments, updateDocument } from '../lib/firestore';
+import { getDocuments } from '../lib/firestore';
 import { useActivityManager } from '../hooks/useActivityManager';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 import { getAllUsers, getUserDisplayNameById } from '../lib/userUtils';
 import { format, addDays, startOfDay, isToday, isTomorrow, isThisWeek, isPast, isSameDay } from 'date-fns';
 import { 
@@ -21,6 +24,46 @@ import {
   Plus,
   CheckSquare
 } from 'lucide-react';
+
+// Helper function to convert various date formats to Date object
+const safeDateConversion = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // Handle Cloud Functions timestamp format: {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && '_seconds' in dateValue) {
+    return new Date(dateValue._seconds * 1000 + Math.floor(dateValue._nanoseconds / 1000000));
+  }
+  
+  // Handle legacy timestamp format: {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && 'seconds' in dateValue) {
+    return new Date(dateValue.seconds * 1000 + Math.floor(dateValue.nanoseconds / 1000000));
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      const date = dateValue.toDate();
+      return isNaN(date.getTime()) ? new Date() : date;
+    } catch (error) {
+      console.error('Error converting timestamp with toDate method:', error);
+      return new Date();
+    }
+  }
+  
+  // If it's a string or number, parse it
+  try {
+    const parsedDate = new Date(dateValue);
+    return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return new Date();
+  }
+};
 
 interface TaskStats {
   total: number;
@@ -57,6 +100,12 @@ interface OpportunityWithTodos {
 }
 
 export const Tasks: React.FC = () => {
+  // API hooks
+  const { getOpportunities, updateOpportunity } = useOpportunitiesApi();
+  const { fetchAccounts } = useAccountsApi();
+  const { getContacts } = useContactsApi();
+  
+  // State
   const [activities, setActivities] = useState<EnhancedTask[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -70,16 +119,16 @@ export const Tasks: React.FC = () => {
   
   const fetchData = useCallback(async () => {
     try {
-      const [opportunitiesData, accountsData, contactsData, usersData] = await Promise.all([
-        getDocuments('opportunities'),
-        getDocuments('accounts'),
-        getDocuments('contacts'),
+      const [opportunitiesResult, accountsResult, contactsResult, usersData] = await Promise.all([
+        getOpportunities(),
+        fetchAccounts(),
+        getContacts(),
         getAllUsers()
       ]);
       
-      const opps = opportunitiesData as Opportunity[];
-      const accs = accountsData as Account[];
-      const cons = contactsData as Contact[];
+      const opps = opportunitiesResult.opportunities;
+      const accs = accountsResult.accounts;
+      const cons = contactsResult.contacts;
       const usrs = usersData as User[];
       
       setOpportunities(opps);
@@ -148,7 +197,7 @@ export const Tasks: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getOpportunities, fetchAccounts, getContacts]);
 
   // Unified activity management
   const activityManager = useActivityManager({ 
@@ -171,7 +220,7 @@ export const Tasks: React.FC = () => {
           : item
       ) || [];
 
-      await updateDocument('opportunities', opportunityId, {
+      await updateOpportunity(opportunityId, {
         checklist: updatedChecklist,
         updatedAt: new Date()
       });
@@ -219,10 +268,10 @@ export const Tasks: React.FC = () => {
     return {
       total: activities.length,
       overdue: activities.filter(task => 
-        task.status === 'Scheduled' && isPast(task.dueDate.toDate()) && !isToday(task.dueDate.toDate())
+        task.status === 'Scheduled' && isPast(safeDateConversion(task.dueDate)) && !isToday(safeDateConversion(task.dueDate))
       ).length,
       dueToday: activities.filter(task => 
-        task.status === 'Scheduled' && isToday(task.dueDate.toDate())
+        task.status === 'Scheduled' && isToday(safeDateConversion(task.dueDate))
       ).length,
       scheduled: activities.filter(task => task.status === 'Scheduled').length,
       completed: activities.filter(task => task.status === 'Completed').length
@@ -240,7 +289,7 @@ export const Tasks: React.FC = () => {
 
   // Get tasks for a specific date
   const getTasksForDate = (date: Date) => {
-    return activities.filter(task => isSameDay(task.dueDate.toDate(), date));
+    return activities.filter(task => isSameDay(safeDateConversion(task.dueDate), date));
   };
 
   // Filter tasks based on search and selected date
@@ -251,7 +300,7 @@ export const Tasks: React.FC = () => {
       task.accountName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.activityType.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesDate = selectedDate ? isSameDay(task.dueDate.toDate(), selectedDate) : true;
+    const matchesDate = selectedDate ? isSameDay(safeDateConversion(task.dueDate), selectedDate) : true;
     
     return matchesSearch && matchesDate;
   });
@@ -267,7 +316,7 @@ export const Tasks: React.FC = () => {
     };
 
     filteredTasks.forEach(task => {
-      const taskDate = task.dueDate.toDate();
+      const taskDate = safeDateConversion(task.dueDate);
       
       if (task.status === 'Completed' || task.status === 'Cancelled') return; // Skip completed/cancelled tasks in scheduled view
       
@@ -368,7 +417,7 @@ export const Tasks: React.FC = () => {
     { 
       key: 'dueDate' as keyof EnhancedTask, 
       label: 'Due Date',
-      render: (dueDate: any) => format(dueDate.toDate(), 'MMM d, yyyy')
+      render: (dueDate: any) => format(safeDateConversion(dueDate), 'MMM d, yyyy')
     }
   ];
 
@@ -646,7 +695,7 @@ export const Tasks: React.FC = () => {
                                   </div>
                                   <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
                                     <span>👤 {task.assignedTo}</span>
-                                    <span>📅 {format(task.dueDate.toDate(), 'MMM d, yyyy')}</span>
+                                    <span>📅 {format(safeDateConversion(task.dueDate), 'MMM d, yyyy')}</span>
                                     <span>🎯 {task.opportunityTitle}</span>
                                     <span>🏢 {task.accountName}</span>
                                     {task.relatedContacts.length > 0 && (
@@ -811,7 +860,7 @@ export const Tasks: React.FC = () => {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-900 break-words">{todo.text}</p>
                             <p className="text-xs text-gray-500 mt-1">
-                              Added {format(todo.createdAt.toDate(), 'MMM d, yyyy')}
+                              Added {format(safeDateConversion(todo.createdAt), 'MMM d, yyyy')}
                             </p>
                           </div>
                           <Link

@@ -14,12 +14,14 @@ import {
   Calendar,
   Package
 } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
 import type { Account, Product, Contact, ContactType, Opportunity } from '../types';
-import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument } from '../lib/firestore';
 import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useProductsApi } from '../hooks/useProductsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 
 export const AccountDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -27,11 +29,34 @@ export const AccountDetails: React.FC = () => {
   const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
+  // API hooks
+  const { 
+    accounts,
+    getAccount, 
+    createAccount, 
+    updateAccount, 
+    deleteAccount,
+    loading: accountsLoading 
+  } = useAccountsApi();
+  
+  const { 
+    contacts, 
+    createContact, 
+    deleteContact,
+    loading: contactsLoading 
+  } = useContactsApi();
+  
+  const { 
+    products,
+    loading: productsLoading 
+  } = useProductsApi();
+  
+  const { 
+    opportunities,
+    loading: opportunitiesLoading 
+  } = useOpportunitiesApi();
+  
   const [account, setAccount] = useState<Account | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -67,39 +92,34 @@ export const AccountDetails: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [productsData, contactsData, opportunitiesData, accountsData] = await Promise.all([
-        getDocuments('products'),
-        getDocuments('contacts'),
-        getDocuments('opportunities'),
-        getDocuments('accounts')
-      ]);
-      setProducts(productsData as Product[]);
-      setContacts(contactsData as Contact[]);
-      setOpportunities(opportunitiesData as Opportunity[]);
-      setAccounts(accountsData as Account[]);
-
       if (!isNew && id && id !== 'new') {
-        const accountData = await getDocument('accounts', id);
+        const accountData = await getAccount(id);
         if (accountData) {
-          const accountTyped = accountData as Account;
-          setAccount(accountTyped);
+          setAccount(accountData);
           setFormData({
-            name: accountTyped.name,
-            region: accountTyped.region,
-            website: accountTyped.website || '',
-            parentAccountId: accountTyped.parentAccountId || '',
-            tags: accountTyped.tags || [],
-            notes: accountTyped.notes || '',
-            ownerId: accountTyped.ownerId || currentUser?.uid || ''
+            name: accountData.name,
+            region: accountData.region,
+            website: accountData.website || '',
+            parentAccountId: accountData.parentAccountId || '',
+            tags: accountData.tags || [],
+            notes: accountData.notes || '',
+            ownerId: accountData.ownerId || currentUser?.uid || ''
           });
         }
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching account data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!accountsLoading && !contactsLoading && !productsLoading && !opportunitiesLoading) {
+      setLoading(false);
+    }
+  }, [accountsLoading, contactsLoading, productsLoading, opportunitiesLoading]);
 
   const relatedProducts = products.filter(p => p.accountId === id);
   const relatedContacts = contacts.filter(c => c.accountId === id);
@@ -116,22 +136,24 @@ export const AccountDetails: React.FC = () => {
         Object.entries(formData).filter(([_, value]) => value !== undefined && value !== '')
       );
 
-      const submitData = {
-        ...cleanData,
-        createdAt: isNew ? Timestamp.now() : account?.createdAt,
-        updatedAt: Timestamp.now()
-      };
-
-      console.log('Saving account:', { isNew, id, submitData });
+      console.log('Saving account:', { isNew, id, formData: cleanData });
 
       if (isNew || !id) {
-        const docId = await createDocument('accounts', submitData);
-        console.log('Account created with ID:', docId);
+        const newAccount = await createAccount({
+          name: cleanData.name,
+          region: cleanData.region,
+          website: cleanData.website,
+          parentAccountId: cleanData.parentAccountId,
+          tags: cleanData.tags,
+          notes: cleanData.notes,
+          ownerId: cleanData.ownerId
+        });
+        console.log('Account created:', newAccount);
         navigate('/accounts');
       } else {
-        await updateDocument('accounts', id, submitData);
-        console.log('Account updated successfully');
-        await fetchData();
+        const updatedAccount = await updateAccount(id, cleanData);
+        console.log('Account updated:', updatedAccount);
+        setAccount(updatedAccount);
       }
     } catch (error) {
       console.error('Error saving account:', error);
@@ -144,10 +166,11 @@ export const AccountDetails: React.FC = () => {
   const handleDelete = async () => {
     if (account && id && confirm('Are you sure you want to delete this account?')) {
       try {
-        await deleteDocument('accounts', id);
+        await deleteAccount(id);
         navigate('/accounts');
       } catch (error) {
         console.error('Error deleting account:', error);
+        alert('Error deleting account. Please try again.');
       }
     }
   };
@@ -177,14 +200,10 @@ export const AccountDetails: React.FC = () => {
           accountId: id || '',
           contactType: 'Primary' as ContactType,
           productIds: [],
-          ownerId: currentUser?.uid || '',
-          createdAt: Timestamp.now()
+          ownerId: currentUser?.uid || ''
         };
         
-        const docRef = await createDocument('contacts', contactData);
-        
-        // Refresh data to show new contact
-        await fetchData();
+        const newContactResponse = await createContact(contactData);
         
         // Reset form
         setNewContact({ name: '', email: '', position: '', phone: '' });
@@ -201,8 +220,7 @@ export const AccountDetails: React.FC = () => {
       try {
         // For accounts, we might want to delete the contact entirely or just unassign it
         // Since contacts belong to accounts, we'll delete the contact entirely
-        await deleteDocument('contacts', contactId);
-        await fetchData(); // Refresh data
+        await deleteContact(contactId);
       } catch (error) {
         console.error('Error removing contact:', error);
         alert('Error removing contact. Please try again.');
@@ -604,7 +622,32 @@ export const AccountDetails: React.FC = () => {
                       {account?.createdAt && (
                         <div>
                           <span className="text-gray-500">Created:</span>
-                          <p className="text-gray-900">{format(account.createdAt.toDate(), 'MMM d, yyyy')}</p>
+                          <p className="text-gray-900">{(() => {
+                            try {
+                              const timestamp = account.createdAt;
+                              let date: Date;
+                              
+                              if ((timestamp as any)?.seconds) {
+                                // Firestore Timestamp format
+                                date = new Date((timestamp as any).seconds * 1000);
+                              } else if (timestamp) {
+                                // Regular date string or Date object
+                                date = new Date(timestamp);
+                              } else {
+                                return 'N/A';
+                              }
+                              
+                              // Validate the date
+                              if (isNaN(date.getTime())) {
+                                return 'Invalid Date';
+                              }
+                              
+                              return format(date, 'MMM d, yyyy');
+                            } catch (error) {
+                              console.error('Date formatting error:', error, account.createdAt);
+                              return 'N/A';
+                            }
+                          })()}</p>
                         </div>
                       )}
                       <div>

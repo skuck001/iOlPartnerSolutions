@@ -19,8 +19,31 @@ import {
 } from 'lucide-react';
 import type { Opportunity, Account, Task, User } from '../types';
 import { getDocuments } from '../lib/firestore';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 import { getAllUsers, getUserDisplayName } from '../lib/userUtils';
 import { format, isAfter, isBefore, subDays, startOfWeek, endOfWeek, differenceInDays, addDays } from 'date-fns';
+
+// Helper function to safely parse any timestamp format
+const safeParseDate = (timestamp: any): Date | null => {
+  if (!timestamp) return null;
+  
+  try {
+    if ((timestamp as any)?.toDate) {
+      return (timestamp as any).toDate();
+    } else if ((timestamp as any)?._seconds) {
+      return new Date((timestamp as any)._seconds * 1000);
+    } else if ((timestamp as any)?.seconds) {
+      return new Date((timestamp as any).seconds * 1000);
+    } else {
+      const date = new Date(timestamp);
+      return isNaN(date.getTime()) ? null : date;
+    }
+  } catch (error) {
+    console.error('Date parsing error:', error, timestamp);
+    return null;
+  }
+};
 
 interface PipelineData {
   stage: string;
@@ -38,6 +61,11 @@ interface OpportunityHealth {
 }
 
 export const Dashboard: React.FC = () => {
+  // API hooks
+  const { getOpportunities } = useOpportunitiesApi();
+  const { fetchAccounts } = useAccountsApi();
+  
+  // State
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -48,15 +76,15 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [opps, accs, tsks, usrs] = await Promise.all([
-          getDocuments('opportunities'),
-          getDocuments('accounts'),
-          getDocuments('tasks'),
+        const [oppsResult, accsResult, tsks, usrs] = await Promise.all([
+          getOpportunities(),
+          fetchAccounts(),
+          getDocuments('tasks'), // Keep this as direct Firestore call for now
           getAllUsers()
         ]);
         
-        setOpportunities(opps as Opportunity[]);
-        setAccounts(accs as Account[]);
+        setOpportunities(oppsResult.opportunities);
+        setAccounts(accsResult.accounts);
         setTasks(tsks as Task[]);
         setUsers(usrs);
       } catch (error) {
@@ -67,7 +95,7 @@ export const Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [getOpportunities, fetchAccounts]);
 
   useEffect(() => {
     if (opportunities.length > 0) {
@@ -105,11 +133,11 @@ export const Dashboard: React.FC = () => {
     !['Closed-Won', 'Closed-Lost'].includes(opp.stage)
   );
 
-  const overdueTasks = tasks.filter(task => 
-    task.status !== 'Done' && 
-    task.dueDate && 
-    isBefore(task.dueDate.toDate(), new Date())
-  );
+  const overdueTasks = tasks.filter(task => {
+    if (task.status === 'Done' || !task.dueDate) return false;
+    const date = safeParseDate(task.dueDate);
+    return date ? isBefore(date, new Date()) : false;
+  });
 
   // Calculate activities this week across all opportunities
   const weekStart = startOfWeek(new Date());
@@ -117,8 +145,8 @@ export const Dashboard: React.FC = () => {
   
   const activitiesThisWeek = opportunities.reduce((count, opp) => {
     return count + (opp.activities || []).filter(activity => {
-      const activityDate = activity.dateTime.toDate();
-      return activityDate >= weekStart && activityDate <= weekEnd;
+      const activityDate = safeParseDate(activity.dateTime);
+      return activityDate ? (activityDate >= weekStart && activityDate <= weekEnd) : false;
     }).length;
   }, 0);
 
@@ -134,20 +162,26 @@ export const Dashboard: React.FC = () => {
   const upcomingActivities = opportunities
     .flatMap(opp => 
       (opp.activities || [])
-        .filter(activity => 
-          activity.status === 'Scheduled' && 
-          isAfter(activity.dateTime.toDate(), new Date()) &&
-          isBefore(activity.dateTime.toDate(), subDays(new Date(), -7))
-        )
+        .filter(activity => {
+          if (activity.status !== 'Scheduled') return false;
+          const date = safeParseDate(activity.dateTime);
+          return date ? (isAfter(date, new Date()) && isBefore(date, subDays(new Date(), -7))) : false;
+        })
         .map(activity => ({ ...activity, opportunityTitle: opp.title, opportunityId: opp.id }))
     )
-    .sort((a, b) => a.dateTime.toDate().getTime() - b.dateTime.toDate().getTime())
+    .sort((a, b) => {
+      const dateA = safeParseDate(a.dateTime);
+      const dateB = safeParseDate(b.dateTime);
+      if (!dateA || !dateB) return 0;
+      return dateA.getTime() - dateB.getTime();
+    })
     .slice(0, 5);
 
   // Stalled opportunities (no activity in 14 days)
   const stalledOpportunities = activeOpportunities.filter(opp => {
     if (!opp.lastActivityDate) return true;
-    return differenceInDays(new Date(), opp.lastActivityDate.toDate()) > 14;
+    const date = safeParseDate(opp.lastActivityDate);
+    return date ? differenceInDays(new Date(), date) > 14 : false;
   }).slice(0, 5);
 
   // Calculate max value for bar chart scaling
@@ -166,17 +200,41 @@ export const Dashboard: React.FC = () => {
 
     activeOpps.forEach(opp => {
       // Check if closing soon (within 30 days)
-      if (opp.expectedCloseDate && isBefore(opp.expectedCloseDate.toDate(), addDays(now, 30))) {
+              const closeDate = safeParseDate(opp.expectedCloseDate);
+              if (closeDate && isBefore(closeDate, addDays(now, 30))) {
         closingSoon.push(opp);
       }
 
       // Check if stalled (no activity in last 14 days)
       const lastActivity = opp.activities && opp.activities.length > 0 
-        ? opp.activities.sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis())[0]
+        ? opp.activities.sort((a, b) => {
+            try {
+              let dateA, dateB;
+              if ((a.dateTime as any)?.toMillis) {
+                dateA = (a.dateTime as any).toMillis();
+              } else {
+                dateA = new Date(a.dateTime).getTime();
+              }
+              
+              if ((b.dateTime as any)?.toMillis) {
+                dateB = (b.dateTime as any).toMillis();
+              } else {
+                dateB = new Date(b.dateTime).getTime();
+              }
+              
+              return dateB - dateA;
+            } catch (error) {
+              console.error('Date sorting error:', error);
+              return 0;
+            }
+          })[0]
         : null;
       
-      const daysSinceLastActivity = lastActivity 
-        ? differenceInDays(now, lastActivity.dateTime.toDate())
+              const daysSinceLastActivity = lastActivity 
+        ? (() => {
+            const date = safeParseDate(lastActivity.dateTime);
+            return date ? differenceInDays(now, date) : 999;
+          })()
         : 999;
 
       if (daysSinceLastActivity > 14) {
@@ -184,15 +242,18 @@ export const Dashboard: React.FC = () => {
       }
 
       // Check if at risk (overdue activities, long sales cycle, etc.)
-      const overdueActivities = (opp.activities || []).filter(activity => 
-        activity.status === 'Scheduled' && isBefore(activity.dateTime.toDate(), now)
-      );
+      const overdueActivities = (opp.activities || []).filter(activity => {
+        if (activity.status !== 'Scheduled') return false;
+        const date = safeParseDate(activity.dateTime);
+        return date ? isBefore(date, now) : false;
+      });
 
       const isAtRisk = overdueActivities.length > 0 || 
                      daysSinceLastActivity > 7 ||
-                     (opp.expectedCloseDate && 
-                      isBefore(opp.expectedCloseDate.toDate(), addDays(now, 7)) && 
-                      opp.stage === 'Discovery');
+                     (() => {
+                       const date = safeParseDate(opp.expectedCloseDate);
+                       return date && isBefore(date, addDays(now, 7)) && opp.stage === 'Discovery';
+                     })();
 
       if (isAtRisk && !stalled.includes(opp)) {
         atRisk.push(opp);
@@ -544,7 +605,10 @@ export const Dashboard: React.FC = () => {
                 </h4>
                 {upcomingActivities.slice(0, 3).map((activity) => (
                   <div key={activity.id} className="text-sm text-gray-600 mb-1 pl-6">
-                    {format(activity.dateTime.toDate(), 'MMM d')} - {activity.subject}
+                    {(() => {
+                  const date = safeParseDate(activity.dateTime);
+                  return date ? format(date, 'MMM d') : 'N/A';
+                })()} - {activity.subject}
                   </div>
                 ))}
               </div>
@@ -571,7 +635,10 @@ export const Dashboard: React.FC = () => {
                   </h4>
                   {overdueTasks.slice(0, 3).map((task) => (
                     <div key={task.id} className="text-sm text-gray-600 mb-1 pl-6">
-                      {task.title} - Due {format(task.dueDate.toDate(), 'MMM d')}
+                      {task.title} - Due {(() => {
+                  const date = safeParseDate(task.dueDate);
+                  return date ? format(date, 'MMM d') : 'N/A';
+                })()}
                     </div>
                   ))}
                 </div>

@@ -30,6 +30,49 @@ import type {
   OpportunityPriority 
 } from '../types';
 import { getDocuments } from '../lib/firestore';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
+
+// Helper function to convert various date formats to Date object
+const safeDateConversion = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // Handle Cloud Functions timestamp format: {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && '_seconds' in dateValue) {
+    return new Date(dateValue._seconds * 1000 + Math.floor(dateValue._nanoseconds / 1000000));
+  }
+  
+  // Handle legacy timestamp format: {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && 'seconds' in dateValue) {
+    return new Date(dateValue.seconds * 1000 + Math.floor(dateValue.nanoseconds / 1000000));
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      const date = dateValue.toDate();
+      return isNaN(date.getTime()) ? new Date() : date;
+    } catch (error) {
+      console.error('Error converting timestamp with toDate method:', error);
+      return new Date();
+    }
+  }
+  
+  // If it's a string or number, parse it
+  try {
+    const parsedDate = new Date(dateValue);
+    return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return new Date();
+  }
+};
 
 interface WeeklySummary {
   totalDealValue: number;
@@ -50,6 +93,12 @@ interface OpportunityProgress {
 }
 
 export const WeeklyReport: React.FC = () => {
+  // API hooks
+  const { getOpportunities } = useOpportunitiesApi();
+  const { fetchAccounts } = useAccountsApi();
+  const { getContacts } = useContactsApi();
+  
+  // State
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -62,7 +111,7 @@ export const WeeklyReport: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [getOpportunities, fetchAccounts, getContacts]);
 
   useEffect(() => {
     if (opportunities.length > 0 && accounts.length > 0) {
@@ -73,15 +122,15 @@ export const WeeklyReport: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [oppsData, accountsData, contactsData] = await Promise.all([
-        getDocuments('opportunities'),
-        getDocuments('accounts'),
-        getDocuments('contacts')
+      const [oppsResult, accountsResult, contactsResult] = await Promise.all([
+        getOpportunities(),
+        fetchAccounts(),
+        getContacts()
       ]);
       
-      setOpportunities(oppsData as Opportunity[]);
-      setAccounts(accountsData as Account[]);
-      setContacts(contactsData as Contact[]);
+      setOpportunities(oppsResult.opportunities);
+      setAccounts(accountsResult.accounts);
+      setContacts(contactsResult.contacts);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -117,7 +166,7 @@ export const WeeklyReport: React.FC = () => {
       if (!account) return;
 
       (opp.activities || []).forEach(activity => {
-        const activityDate = activity.dateTime.toDate();
+        const activityDate = safeDateConversion(activity.dateTime);
         const enhancedActivity = { ...activity, opportunity: opp, account };
         allActivities.push(enhancedActivity);
 
@@ -138,8 +187,26 @@ export const WeeklyReport: React.FC = () => {
       });
     });
 
-    setWeeklyActivities(thisWeekActivities.sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis()));
-    setNextWeekActivities(nextWeekActivities.sort((a, b) => a.dateTime.toMillis() - b.dateTime.toMillis()));
+    setWeeklyActivities(thisWeekActivities.sort((a, b) => {
+      try {
+        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
+        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+        return timeB - timeA;
+      } catch (error) {
+        console.error('Date sorting error:', error);
+        return 0;
+      }
+    }));
+    setNextWeekActivities(nextWeekActivities.sort((a, b) => {
+      try {
+        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
+        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+        return timeA - timeB;
+      } catch (error) {
+        console.error('Date sorting error:', error);
+        return 0;
+      }
+    }));
 
     setSummary({
       totalDealValue,
@@ -153,18 +220,27 @@ export const WeeklyReport: React.FC = () => {
     // Analyze opportunity progress
     const progress = activeOpps.map(opp => {
       const account = accounts.find(a => a.id === opp.accountId);
-      const activities = (opp.activities || []).sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis());
+      const activities = (opp.activities || []).sort((a, b) => {
+        try {
+          const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
+          const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+          return timeB - timeA;
+        } catch (error) {
+          console.error('Date sorting error:', error);
+          return 0;
+        }
+      });
       const lastActivity = activities.find(a => a.status === 'Completed');
       const nextActivity = activities.find(a => a.status === 'Scheduled');
 
       // Detect weekly changes (simplified - would need proper change tracking)
       const weeklyChanges: string[] = [];
-      if (opp.updatedAt && isWithinInterval(opp.updatedAt.toDate(), { start: weekStart, end: weekEnd })) {
+      if (opp.updatedAt && isWithinInterval(safeDateConversion(opp.updatedAt), { start: weekStart, end: weekEnd })) {
         weeklyChanges.push('Opportunity updated this week');
       }
 
       const thisWeekActivityCount = activities.filter(a => 
-        isWithinInterval(a.dateTime.toDate(), { start: weekStart, end: weekEnd })
+        isWithinInterval(safeDateConversion(a.dateTime), { start: weekStart, end: weekEnd })
       ).length;
 
       if (thisWeekActivityCount > 0) {
@@ -174,7 +250,7 @@ export const WeeklyReport: React.FC = () => {
       // Risk factors
       const riskFactors: string[] = [];
       const daysSinceLastActivity = lastActivity ? 
-        Math.floor((new Date().getTime() - lastActivity.dateTime.toDate().getTime()) / (1000 * 60 * 60 * 24)) : 
+        Math.floor((new Date().getTime() - safeDateConversion(lastActivity.dateTime).getTime()) / (1000 * 60 * 60 * 24)) : 
         999;
 
       if (daysSinceLastActivity > 14) {
@@ -182,13 +258,13 @@ export const WeeklyReport: React.FC = () => {
       }
 
       const overdueActivities = activities.filter(a => 
-        a.status === 'Scheduled' && a.dateTime.toDate() < new Date()
+        a.status === 'Scheduled' && safeDateConversion(a.dateTime) < new Date()
       );
       if (overdueActivities.length > 0) {
         riskFactors.push(`${overdueActivities.length} overdue activities`);
       }
 
-      if (opp.expectedCloseDate && opp.expectedCloseDate.toDate() < addWeeks(new Date(), 2) && opp.stage === 'Discovery') {
+      if (opp.expectedCloseDate && safeDateConversion(opp.expectedCloseDate) < addWeeks(new Date(), 2) && opp.stage === 'Discovery') {
         riskFactors.push('Close date approaching but still in Discovery');
       }
 
@@ -300,9 +376,9 @@ export const WeeklyReport: React.FC = () => {
         progress.opportunity.region || '',
         progress.opportunity.iolProducts?.join(', ') || '',
         progress.opportunity.commercialModel || '',
-        progress.opportunity.expectedCloseDate ? format(progress.opportunity.expectedCloseDate.toDate(), 'MMM d, yyyy') : '',
-        progress.lastActivity ? `${progress.lastActivity.subject} (${format(progress.lastActivity.dateTime.toDate(), 'MMM d')})` : 'No recent activity',
-        progress.nextActivity ? `${progress.nextActivity.subject} (${format(progress.nextActivity.dateTime.toDate(), 'MMM d')})` : 'No scheduled activity',
+        progress.opportunity.expectedCloseDate ? format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM d, yyyy') : '',
+        progress.lastActivity ? `${progress.lastActivity.subject} (${format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d')})` : 'No recent activity',
+        progress.nextActivity ? `${progress.nextActivity.subject} (${format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d')})` : 'No scheduled activity',
         progress.weeklyChanges.join('; '),
         progress.riskFactors.join('; ')
       ])
@@ -327,8 +403,8 @@ export const WeeklyReport: React.FC = () => {
     const activitiesData = [
       activitiesHeaders,
       ...weeklyActivities.map(activity => [
-        format(activity.dateTime.toDate(), 'MMM d, yyyy'),
-        format(activity.dateTime.toDate(), 'h:mm a'),
+        format(safeDateConversion(activity.dateTime), 'MMM d, yyyy'),
+        format(safeDateConversion(activity.dateTime), 'h:mm a'),
         activity.activityType,
         activity.subject,
         activity.status,
@@ -346,8 +422,8 @@ export const WeeklyReport: React.FC = () => {
     const nextWeekData = [
       activitiesHeaders,
       ...nextWeekActivities.map(activity => [
-        format(activity.dateTime.toDate(), 'MMM d, yyyy'),
-        format(activity.dateTime.toDate(), 'h:mm a'),
+        format(safeDateConversion(activity.dateTime), 'MMM d, yyyy'),
+        format(safeDateConversion(activity.dateTime), 'h:mm a'),
         activity.activityType,
         activity.subject,
         activity.status,
@@ -622,7 +698,7 @@ export const WeeklyReport: React.FC = () => {
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-sm font-medium text-green-700">Last Activity</span>
                                 <span className="text-xs text-green-600">
-                                  {format(progress.lastActivity.dateTime.toDate(), 'MMM d')}
+                                  {format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d')}
                                 </span>
                               </div>
                               <p className="text-sm text-green-800 font-medium">{progress.lastActivity.subject}</p>
@@ -640,7 +716,7 @@ export const WeeklyReport: React.FC = () => {
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-sm font-medium text-blue-700">Next Activity</span>
                                 <span className="text-xs text-blue-600">
-                                  {format(progress.nextActivity.dateTime.toDate(), 'MMM d')}
+                                  {format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d')}
                                 </span>
                               </div>
                               <p className="text-sm text-blue-800 font-medium">{progress.nextActivity.subject}</p>
@@ -668,10 +744,10 @@ export const WeeklyReport: React.FC = () => {
                         {progress.opportunity.expectedCloseDate && (
                           <div className="flex flex-col items-end gap-1">
                             <p className="text-sm text-gray-500">
-                              Close: {format(progress.opportunity.expectedCloseDate.toDate(), 'MMM yyyy')}
+                              Close: {format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM yyyy')}
                             </p>
                             {(() => {
-                              const closeDate = progress.opportunity.expectedCloseDate.toDate();
+                              const closeDate = safeDateConversion(progress.opportunity.expectedCloseDate);
                               const daysUntilClose = Math.ceil((closeDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                               if (daysUntilClose <= 0) {
                                 return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Overdue</span>;
@@ -690,7 +766,7 @@ export const WeeklyReport: React.FC = () => {
                       {(() => {
                         const lastActivity = progress.lastActivity;
                         if (lastActivity) {
-                          const daysSinceLastActivity = Math.floor((new Date().getTime() - lastActivity.dateTime.toDate().getTime()) / (1000 * 60 * 60 * 24));
+                          const daysSinceLastActivity = Math.floor((new Date().getTime() - safeDateConversion(lastActivity.dateTime).getTime()) / (1000 * 60 * 60 * 24));
                           if (daysSinceLastActivity > 7) {
                             return (
                               <div className="text-xs text-gray-500">
@@ -743,7 +819,7 @@ export const WeeklyReport: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-900">
-                          {format(activity.dateTime.toDate(), 'MMM d, h:mm a')}
+                          {format(safeDateConversion(activity.dateTime), 'MMM d, h:mm a')}
                         </p>
                         <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${
                           isCompleted ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -783,7 +859,7 @@ export const WeeklyReport: React.FC = () => {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-900">
-                          {format(activity.dateTime.toDate(), 'EEE, MMM d, h:mm a')}
+                          {format(safeDateConversion(activity.dateTime), 'EEE, MMM d, h:mm a')}
                         </p>
                         <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
                           {activity.activityType} • {activity.method}

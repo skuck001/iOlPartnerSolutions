@@ -18,6 +18,46 @@ import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
 
+// Helper function to convert various date formats to Date object
+const safeDateConversion = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // Handle Cloud Functions timestamp format: {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && '_seconds' in dateValue) {
+    return new Date(dateValue._seconds * 1000 + Math.floor(dateValue._nanoseconds / 1000000));
+  }
+  
+  // Handle legacy timestamp format: {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue === 'object' && 'seconds' in dateValue) {
+    return new Date(dateValue.seconds * 1000 + Math.floor(dateValue.nanoseconds / 1000000));
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    try {
+      const date = dateValue.toDate();
+      return isNaN(date.getTime()) ? new Date() : date;
+    } catch (error) {
+      console.error('Error converting timestamp with toDate method:', error);
+      return new Date();
+    }
+  }
+  
+  // If it's a string or number, parse it
+  try {
+    const parsedDate = new Date(dateValue);
+    return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  } catch (error) {
+    console.error('Error parsing date:', error);
+    return new Date();
+  }
+};
+
 const TASK_STATUSES: TaskStatus[] = ['To do', 'In progress', 'Done'];
 
 const TASK_BUCKETS = [
@@ -88,7 +128,7 @@ export const TaskDetails: React.FC = () => {
             opportunityId: taskTyped.opportunityId || '',
             assignedTo: taskTyped.assignedTo,
             ownerId: taskTyped.ownerId || taskTyped.assignedTo || currentUser?.uid || '',
-            dueDate: taskTyped.dueDate ? format(taskTyped.dueDate.toDate(), 'yyyy-MM-dd') : '',
+            dueDate: taskTyped.dueDate ? format(safeDateConversion(taskTyped.dueDate), 'yyyy-MM-dd') : '',
             status: taskTyped.status,
             bucket: taskTyped.bucket || '',
             description: taskTyped.description || '',

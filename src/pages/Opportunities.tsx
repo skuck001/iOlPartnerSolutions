@@ -33,6 +33,9 @@ type SortDirection = 'asc' | 'desc';
 const toDate = (dateValue: any): Date => {
   if (!dateValue) return new Date();
   
+  // Debug logging to identify timestamp format
+  console.log('toDate called with:', typeof dateValue, dateValue);
+  
   // If it's already a Date object
   if (dateValue instanceof Date) {
     // Check if it's a valid date
@@ -43,6 +46,18 @@ const toDate = (dateValue: any): Date => {
   if (dateValue && typeof dateValue.toDate === 'function') {
     const date = dateValue.toDate();
     return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // Handle Cloud Functions timestamp format {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue._seconds === 'number') {
+    console.log('Converting Cloud Functions timestamp:', dateValue);
+    return new Date(dateValue._seconds * 1000);
+  }
+  
+  // Handle legacy format {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue.seconds === 'number') {
+    console.log('Converting legacy timestamp:', dateValue);
+    return new Date(dateValue.seconds * 1000);
   }
   
   // If it's a string or number, parse it
@@ -68,6 +83,16 @@ const toMillis = (dateValue: any): number => {
   if (dateValue && typeof dateValue.toDate === 'function') {
     const date = dateValue.toDate();
     return isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  
+  // Handle Cloud Functions timestamp format {_seconds: number, _nanoseconds: number}
+  if (dateValue && typeof dateValue._seconds === 'number') {
+    return dateValue._seconds * 1000;
+  }
+  
+  // Handle legacy format {seconds: number, nanoseconds: number}
+  if (dateValue && typeof dateValue.seconds === 'number') {
+    return dateValue.seconds * 1000;
   }
   
   // If it's a string or number, parse it
@@ -593,6 +618,10 @@ export const Opportunities: React.FC = () => {
                         const isOverdue = isOpportunityOverdue(opportunity);
                         const progress = getStageProgress(opportunity.stage);
                         
+                        // Calculate activity data specific to THIS opportunity
+                        const nextScheduledActivity = getNextScheduledActivity(opportunity);
+                        const lastCompletedActivity = getLastCompletedActivity(opportunity);
+                        
                         return (
                           <tr
                             key={opportunity.id}
@@ -682,66 +711,58 @@ export const Opportunities: React.FC = () => {
                             {/* Next Activity */}
                             <td className="px-6 py-4">
                               <div>
-                                {(() => {
-                                  const nextScheduled = getNextScheduledActivity(opportunity);
-                                  
-                                  if (nextScheduled) {
-                                                    const isToday = format(toDate(nextScheduled.dateTime), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-                const isOverdue = isBefore(toDate(nextScheduled.dateTime), new Date());
+                                {nextScheduledActivity ? (
+                                  (() => {
+                                    const isToday = format(toDate(nextScheduledActivity.dateTime), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                                    const isActivityOverdue = isBefore(toDate(nextScheduledActivity.dateTime), new Date());
                                     
                                     return (
                                       <div className="flex items-center gap-2">
-                                        <Clock className={`h-4 w-4 ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`} />
+                                        <Clock className={`h-4 w-4 ${isActivityOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`} />
                                         <div>
-                                                                    <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-gray-900'}`}>
-                            {format(toDate(nextScheduled.dateTime), 'MMM d, h:mm a')}
-                          </div>
-                                          <div className="text-xs text-gray-500 truncate max-w-32">
-                                            {nextScheduled.subject}
+                                          <div className={`text-sm font-medium ${isActivityOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-gray-900'}`}>
+                                            {format(toDate(nextScheduledActivity.dateTime), 'MMM d, h:mm a')}
                                           </div>
-                                          {isOverdue && (
+                                          <div className="text-xs text-gray-500 truncate max-w-32">
+                                            {nextScheduledActivity.subject}
+                                          </div>
+                                          {isActivityOverdue && (
                                             <div className="text-xs text-red-600 font-medium">Overdue</div>
                                           )}
-                                          {isToday && !isOverdue && (
+                                          {isToday && !isActivityOverdue && (
                                             <div className="text-xs text-orange-600 font-medium">Today</div>
                                           )}
                                         </div>
                                       </div>
                                     );
-                                  } else {
-                                    return <span className="text-sm text-gray-500">None scheduled</span>;
-                                  }
-                                })()}
+                                  })()
+                                ) : (
+                                  <span className="text-sm text-gray-500">None scheduled</span>
+                                )}
                               </div>
                             </td>
 
                             {/* Last Activity */}
                             <td className="px-6 py-4">
                               <div>
-                                {(() => {
-                                  const lastCompleted = getLastCompletedActivity(opportunity);
-                                  
-                                  if (lastCompleted) {
-                                    return (
-                                      <div className="flex items-center gap-2">
-                                        <CheckCircle className="h-4 w-4 text-green-500" />
-                                        <div>
-                                                                                  <div className="text-sm text-gray-900">
-                                          {formatDistanceToNow(toDate(lastCompleted.dateTime), { addSuffix: true })}
-                                        </div>
-                                        <div className="text-xs text-gray-500 truncate max-w-32">
-                                          {lastCompleted.subject}
-                                        </div>
-                                        <div className="text-xs text-gray-400">
-                                          {format(toDate(lastCompleted.dateTime), 'MMM d')}
-                                        </div>
-                                        </div>
+                                {lastCompletedActivity ? (
+                                  <div className="flex items-center gap-2">
+                                    <CheckCircle className="h-4 w-4 text-green-500" />
+                                    <div>
+                                      <div className="text-sm text-gray-900">
+                                        {formatDistanceToNow(toDate(lastCompletedActivity.dateTime), { addSuffix: true })}
                                       </div>
-                                    );
-                                  } else {
-                                    return <span className="text-sm text-gray-500">No activity</span>;
-                                  }
-                                })()}
+                                      <div className="text-xs text-gray-500 truncate max-w-32">
+                                        {lastCompletedActivity.subject}
+                                      </div>
+                                      <div className="text-xs text-gray-400">
+                                        {format(toDate(lastCompletedActivity.dateTime), 'MMM d')}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-gray-500">No activity</span>
+                                )}
                               </div>
                             </td>
 

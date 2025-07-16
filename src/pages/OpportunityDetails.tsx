@@ -36,7 +36,6 @@ import {
   DollarSign,
   FileText
 } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
 import type { 
   Opportunity, 
   OpportunityStage, 
@@ -48,12 +47,16 @@ import type {
   ActivityStatus,
   ChecklistItem
 } from '../types';
-import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument } from '../lib/firestore';
 import { format, formatDistanceToNow } from 'date-fns';
+import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
 import { ActivityManager } from '../components/ActivityManager';
 import { useActivityManager } from '../hooks/useActivityManager';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useProductsApi } from '../hooks/useProductsApi';
 
 const OPPORTUNITY_STAGES: OpportunityStage[] = ['Discovery', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
 const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
@@ -89,10 +92,31 @@ export const OpportunityDetails: React.FC = () => {
   const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
+  // API hooks
+  const { 
+    getOpportunity, 
+    createOpportunity, 
+    updateOpportunity, 
+    deleteOpportunity,
+    loading: opportunitiesLoading 
+  } = useOpportunitiesApi();
+  
+  const { 
+    accounts,
+    loading: accountsLoading 
+  } = useAccountsApi();
+  
+  const { 
+    contacts,
+    loading: contactsLoading 
+  } = useContactsApi();
+  
+  const { 
+    products,
+    loading: productsLoading 
+  } = useProductsApi();
+  
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -183,10 +207,47 @@ export const OpportunityDetails: React.FC = () => {
     return colors[priority];
   };
 
+  // Helper function to safely convert various date formats to Date object
+  const safeDateConversion = (dateValue: any): Date => {
+    try {
+      // Handle Firestore Timestamp
+      if (dateValue && typeof dateValue.toDate === 'function') {
+        return dateValue.toDate();
+      }
+      
+      // Handle Cloud Functions format {_seconds: number, _nanoseconds: number}
+      if (dateValue && typeof dateValue._seconds === 'number') {
+        return new Date(dateValue._seconds * 1000);
+      }
+      
+      // Handle legacy format {seconds: number, nanoseconds: number}
+      if (dateValue && typeof dateValue.seconds === 'number') {
+        return new Date(dateValue.seconds * 1000);
+      }
+      
+      // Handle Date objects
+      if (dateValue instanceof Date) {
+        return dateValue;
+      }
+      
+      // Handle date strings
+      if (typeof dateValue === 'string') {
+        return new Date(dateValue);
+      }
+      
+      // Fallback to current date
+      console.warn('Unable to parse date value:', dateValue);
+      return new Date();
+    } catch (error) {
+      console.error('Date conversion error:', error, dateValue);
+      return new Date();
+    }
+  };
+
   const handleEditActivity = (activity: ActivityType) => {
     setActivityForm({
       activityType: activity.activityType,
-      dateTime: activity.dateTime instanceof Timestamp ? activity.dateTime.toDate() : activity.dateTime,
+      dateTime: safeDateConversion(activity.dateTime),
       relatedContactIds: activity.relatedContactIds || [],
       method: activity.method,
       subject: activity.subject,
@@ -211,7 +272,7 @@ export const OpportunityDetails: React.FC = () => {
           });
           return clean;
         });
-      await updateDocument('opportunities', id, { activities: sanitized });
+      await updateOpportunity(id, { activities: sanitized });
       // Don't fetch back from Firestore - trust the local state which is already updated
     }
   };
@@ -325,7 +386,7 @@ export const OpportunityDetails: React.FC = () => {
     try {
       // Fetch opportunity first for immediate content
       if (id && id !== 'new') {
-        const opportunityData = await getDocument('opportunities', id);
+        const opportunityData = await getOpportunity(id);
         if (opportunityData) {
           const opportunityTyped = opportunityData as Opportunity;
           setOpportunity(opportunityTyped);
@@ -346,7 +407,7 @@ export const OpportunityDetails: React.FC = () => {
             commercialModel: opportunityTyped.commercialModel || '',
             potentialVolume: opportunityTyped.potentialVolume || 0,
             estimatedDealValue: opportunityTyped.estimatedDealValue || 0,
-            expectedCloseDate: opportunityTyped.expectedCloseDate ? opportunityTyped.expectedCloseDate.toDate() : null,
+            expectedCloseDate: opportunityTyped.expectedCloseDate ? safeDateConversion(opportunityTyped.expectedCloseDate) : null,
             ownerId: opportunityTyped.ownerId || currentUser?.uid || ''
           });
         }
@@ -358,29 +419,12 @@ export const OpportunityDetails: React.FC = () => {
     }
   }, [id, isNew, currentUser?.uid]);
 
-  // Fetch related data progressively
-  const fetchRelatedData = useCallback(async () => {
-    try {
-      // Fetch only essential data first
-      const [accountsData] = await Promise.all([
-        getDocuments('accounts') // Still need all accounts for dropdown
-      ]);
-      setAccounts(accountsData as Account[]);
-
-      // Then fetch contacts and products
-      const [contactsData, productsData] = await Promise.all([
-        getDocuments('contacts'),
-        getDocuments('products')
-      ]);
-      setContacts(contactsData as Contact[]);
-      setProducts(productsData as Product[]);
-      
-      setDataLoading(false);
-    } catch (error) {
-      console.error('Error fetching related data:', error);
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!opportunitiesLoading && !accountsLoading && !contactsLoading && !productsLoading) {
       setDataLoading(false);
     }
-  }, []);
+  }, [opportunitiesLoading, accountsLoading, contactsLoading, productsLoading]);
 
   // Unified activity management
   const activityManager = useActivityManager({ 
@@ -395,9 +439,7 @@ export const OpportunityDetails: React.FC = () => {
     fetchOpportunityData();
   }, [fetchOpportunityData]);
 
-  useEffect(() => {
-    fetchRelatedData();
-  }, [fetchRelatedData]);
+  // No longer needed as data is auto-loaded by hooks
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -419,19 +461,29 @@ export const OpportunityDetails: React.FC = () => {
         ...cleanData,
         expectedCloseDate: formData.expectedCloseDate ? Timestamp.fromDate(formData.expectedCloseDate) : null,
         lastActivityDate: formData.activities.length > 0 
-          ? formData.activities.sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis())[0].dateTime 
+          ? formData.activities.sort((a, b) => {
+            try {
+              const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
+              const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+              return timeB - timeA;
+            } catch (error) {
+              console.error('Date sorting error:', error);
+              return 0;
+            }
+          })[0].dateTime 
           : null,
         createdAt: isNew ? Timestamp.now() : opportunity?.createdAt,
         updatedAt: Timestamp.now()
       };
 
       if (isNew || !id) {
-        const docId = await createDocument('opportunities', submitData);
+        const newOpportunity = await createOpportunity(submitData);
+        console.log('Opportunity created:', newOpportunity);
         navigate('/opportunities');
       } else {
-        await updateDocument('opportunities', id, submitData);
-        await fetchOpportunityData();
-        await fetchRelatedData();
+        const updatedOpportunity = await updateOpportunity(id, submitData);
+        console.log('Opportunity updated:', updatedOpportunity);
+        setOpportunity(updatedOpportunity);
       }
     } catch (error) {
       console.error('Error saving opportunity:', error);
@@ -444,7 +496,7 @@ export const OpportunityDetails: React.FC = () => {
   const handleDelete = async () => {
     if (opportunity && id && confirm('Are you sure you want to delete this opportunity?')) {
       try {
-        await deleteDocument('opportunities', id);
+        await deleteOpportunity(id);
         navigate('/opportunities');
       } catch (error) {
         console.error('Error deleting opportunity:', error);
@@ -472,11 +524,10 @@ export const OpportunityDetails: React.FC = () => {
           createdAt: Timestamp.now()
         };
         
-        const docRef = await createDocument('contacts', contactData);
+        const newContactResponse = await createContact(contactData);
         
-        // Refresh contacts and add to opportunity
-        await fetchRelatedData();
-        handleContactToggle(docRef.id);
+        // Add new contact to opportunity
+        handleContactToggle(newContactResponse.id);
         
         // Reset form
         setNewContact({ name: '', email: '', position: '', phone: '' });
@@ -984,12 +1035,20 @@ export const OpportunityDetails: React.FC = () => {
                         <div className="space-y-6">
                           {formData.activities
                             .sort((a, b) => {
-                              // Sort by status (Scheduled first), then by dateTime
-                              if (a.status !== b.status) {
-                                const statusOrder = { 'Scheduled': 0, 'Completed': 1, 'Cancelled': 2 };
-                                return statusOrder[a.status] - statusOrder[b.status];
+                              // Sort by dateTime descending (newest first)
+                              try {
+                                const dateA = safeDateConversion(a.dateTime);
+                                const dateB = safeDateConversion(b.dateTime);
+                                return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
+                              } catch (error) {
+                                console.error('Date sorting error:', error, { 
+                                  activityA: a.id, 
+                                  activityB: b.id,
+                                  dateTimeA: a.dateTime,
+                                  dateTimeB: b.dateTime
+                                });
+                                return 0;
                               }
-                              return b.dateTime.toMillis() - a.dateTime.toMillis();
                             })
                             .slice(0, activitiesDisplayCount) // Show only limited number
                             .map((activity, index) => {
@@ -1023,8 +1082,24 @@ export const OpportunityDetails: React.FC = () => {
                                 return colors[priority || 'Medium'];
                               };
 
-                              const isOverdue = activity.status === 'Scheduled' && activity.dateTime.toDate() < new Date();
-                              const isToday = format(activity.dateTime.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                                                  const isOverdue = activity.status === 'Scheduled' && (() => {
+                      try {
+                        const date = safeDateConversion(activity.dateTime);
+                        return date < new Date();
+                      } catch (error) {
+                        console.error('Date comparison error:', error, activity.dateTime);
+                        return false;
+                      }
+                    })();
+                    const isToday = (() => {
+                      try {
+                        const date = safeDateConversion(activity.dateTime);
+                        return format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                      } catch (error) {
+                        console.error('Date formatting error:', error, activity.dateTime);
+                        return false;
+                      }
+                    })();
                               
                               return (
                                 <div key={activity.id} className="relative flex items-start">
@@ -1089,7 +1164,15 @@ export const OpportunityDetails: React.FC = () => {
                                         <div className="flex items-center gap-2 text-sm text-gray-600">
                                           <Calendar className="h-4 w-4 text-gray-400" />
                                           <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
-                                            {format(activity.dateTime.toDate(), 'MMM d, yyyy • h:mm a')}
+                                            {(() => {
+                                try {
+                                  const date = safeDateConversion(activity.dateTime);
+                                  return format(date, 'MMM d, yyyy • h:mm a');
+                                } catch (error) {
+                                  console.error('Date formatting error:', error, activity.dateTime);
+                                  return 'N/A';
+                                }
+                              })()}
                                           </span>
                                         </div>
                                         
@@ -1104,7 +1187,15 @@ export const OpportunityDetails: React.FC = () => {
                                           <div className="flex items-center gap-2 text-sm text-green-700 md:col-span-2">
                                             <CheckCircle2 className="h-4 w-4 text-green-500" />
                                             <span>
-                                              Completed: {format(activity.completedAt.toDate(), 'MMM d, yyyy • h:mm a')}
+                                              Completed: {(() => {
+                                try {
+                                  const date = safeDateConversion(activity.completedAt);
+                                  return format(date, 'MMM d, yyyy • h:mm a');
+                                } catch (error) {
+                                  console.error('Date formatting error:', error, activity.completedAt);
+                                  return 'N/A';
+                                }
+                              })()}
                                             </span>
                                           </div>
                                         )}
@@ -1309,13 +1400,29 @@ export const OpportunityDetails: React.FC = () => {
                           <div>
                             <span className="text-gray-500">Created</span>
                             <div className="font-medium text-gray-900">
-                              {opportunity?.createdAt ? format(opportunity.createdAt.toDate(), 'MMM d, yyyy') : 'N/A'}
+                              {opportunity?.createdAt ? (() => {
+                        try {
+                          const date = safeDateConversion(opportunity.createdAt);
+                          return format(date, 'MMM d, yyyy');
+                        } catch (error) {
+                          console.error('Date formatting error:', error, opportunity.createdAt);
+                          return 'N/A';
+                        }
+                      })() : 'N/A'}
                             </div>
                           </div>
                           <div>
                             <span className="text-gray-500">Last Updated</span>
                             <div className="font-medium text-gray-900">
-                              {opportunity?.updatedAt ? format(opportunity.updatedAt.toDate(), 'MMM d, yyyy') : 'N/A'}
+                              {opportunity?.updatedAt ? (() => {
+                        try {
+                          const date = safeDateConversion(opportunity.updatedAt);
+                          return format(date, 'MMM d, yyyy');
+                        } catch (error) {
+                          console.error('Date formatting error:', error, opportunity.updatedAt);
+                          return 'N/A';
+                        }
+                      })() : 'N/A'}
                             </div>
                           </div>
                         </div>
@@ -1641,7 +1748,15 @@ export const OpportunityDetails: React.FC = () => {
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-900 break-words">{item.text}</p>
                             <p className="text-xs text-gray-500 mt-1">
-                              Added {format(item.createdAt.toDate(), 'MMM d, yyyy')}
+                              Added {(() => {
+                              try {
+                                const date = safeDateConversion(item.createdAt);
+                                return format(date, 'MMM d, yyyy');
+                              } catch (error) {
+                                console.error('Date formatting error:', error, item.createdAt);
+                                return 'N/A';
+                              }
+                            })()}
                             </p>
                           </div>
                           <button
@@ -1675,7 +1790,15 @@ export const OpportunityDetails: React.FC = () => {
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-700 line-through break-words">{item.text}</p>
                                 <p className="text-xs text-gray-400 mt-1">
-                                  Completed {item.completedAt ? format(item.completedAt.toDate(), 'MMM d, yyyy') : 'recently'}
+                                  Completed {item.completedAt ? (() => {
+                              try {
+                                const date = safeDateConversion(item.completedAt);
+                                return format(date, 'MMM d, yyyy');
+                              } catch (error) {
+                                console.error('Date formatting error:', error, item.completedAt);
+                                return 'N/A';
+                              }
+                            })() : 'recently'}
                                 </p>
                               </div>
                               <button

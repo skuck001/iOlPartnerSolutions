@@ -61,6 +61,25 @@ export {
   bulkUpdateOpportunities
 } from './modules/opportunities/opportunities.functions';
 
+// Export task functions
+export {
+  // Standalone tasks
+  getTasks,
+  getTask,
+  createTask,
+  updateTask,
+  deleteTask,
+  // Activities within opportunities
+  getActivitiesByOpportunity,
+  addActivityToOpportunity,
+  updateActivityInOpportunity,
+  deleteActivityFromOpportunity,
+  // Checklist within opportunities
+  getChecklistByOpportunity,
+  addChecklistItemToOpportunity,
+  updateChecklistItemInOpportunity,
+  deleteChecklistItemFromOpportunity
+} from './modules/tasks/tasks.functions';
+
 // Future exports for other modules:
-// export { ... } from './modules/tasks/tasks.functions';
 // export { ... } from './modules/users/users.functions';
