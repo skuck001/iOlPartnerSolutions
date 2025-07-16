@@ -5,24 +5,21 @@ import { clearUsersCache } from './userUtils';
 export const sampleAccounts = [
   {
     name: 'HotelTech Solutions',
-    industry: 'PMS',
-    region: 'North America',
+    region: 'United States',
     website: 'https://hoteltech.com',
-    notes: 'Leading PMS provider for luxury hotels'
+    notes: 'Leading technology provider for luxury hotels'
   },
   {
     name: 'TravelConnect',
-    industry: 'GDS',
-    region: 'Europe',
+    region: 'United Kingdom',
     website: 'https://travelconnect.eu',
-    notes: 'Major GDS provider in European market'
+    notes: 'Major technology provider in European market'
   },
   {
     name: 'ChannelMax',
-    industry: 'ChannelManager',
-    region: 'Asia Pacific',
+    region: 'Australia',
     website: 'https://channelmax.com',
-    notes: 'Fast-growing channel management company'
+    notes: 'Fast-growing technology company'
   }
 ];
 

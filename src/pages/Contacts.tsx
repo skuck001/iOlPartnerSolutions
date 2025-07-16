@@ -263,7 +263,7 @@ export const Contacts: React.FC = () => {
           'Department': contact.department || '',
           'Contact Type': contact.contactType,
           'Account Name': account?.name || 'Unknown Account',
-          'Account Industry': account?.industry || '',
+          'Account Headoffice Country': account?.region || '',
           'Account Region': account?.region || '',
           'Is Decision Maker': contact.isDecisionMaker ? 'Yes' : 'No',
           'Preferred Contact Method': contact.preferredContactMethod || '',
@@ -579,7 +579,7 @@ export const Contacts: React.FC = () => {
                                 {account?.name || 'Unknown Account'}
                               </div>
                               <div className="text-xs text-gray-500">
-                                {account?.industry} • {account?.region}
+                                {account?.region}
                               </div>
                             </div>
                           </div>

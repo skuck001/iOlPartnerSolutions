@@ -71,8 +71,7 @@ export const tasksCollection = () => getCollection('tasks');
 export const usersCollection = () => getCollection('users');
 
 // Helper functions for common queries
-export const getAccountsByIndustry = (industry: string) =>
-  getDocuments('accounts', [where('industry', '==', industry)]);
+// getAccountsByIndustry removed as industry field no longer exists
 
 export const getContactsByAccount = (accountId: string) =>
   getDocuments('contacts', [where('accountId', '==', accountId)]);
@@ -260,7 +259,7 @@ export const getRecentlyUpdatedItems = async (limitCount: number = 5): Promise<R
             switch (type) {
               case 'account':
                 title = item.name;
-                subtitle = item.industry || '';
+                subtitle = item.region || '';
                 href = `/accounts/${item.id}`;
                 break;
               case 'contact':

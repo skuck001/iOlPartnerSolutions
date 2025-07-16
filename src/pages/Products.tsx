@@ -27,7 +27,7 @@ import {
   Layers
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { Product, ProductCategory, ProductSubcategory, Account, Contact, Opportunity, Industry } from '../types';
+import type { Product, ProductCategory, ProductSubcategory, Account, Contact, Opportunity } from '../types';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
@@ -44,7 +44,7 @@ export const Products: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [businessTypeFilter, setBusinessTypeFilter] = useState<Industry | 'All'>('All');
+  const [businessTypeFilter, setBusinessTypeFilter] = useState<string>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [accountFilter, setAccountFilter] = useState<string>('All');
 
@@ -136,20 +136,7 @@ export const Products: React.FC = () => {
     return colors[category];
   };
 
-  const getBusinessTypeColor = (businessType: string) => {
-    const colors = {
-      'PMS': 'bg-blue-100 text-blue-800 border-blue-200',
-      'CRS': 'bg-green-100 text-green-800 border-green-200',
-      'ChannelManager': 'bg-purple-100 text-purple-800 border-purple-200',
-      'GDS': 'bg-red-100 text-red-800 border-red-200',
-      'Connectivity': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'Business Intelligence': 'bg-indigo-100 text-indigo-800 border-indigo-200',
-      'Revenue Management': 'bg-teal-100 text-teal-800 border-teal-200',
-      'Distribution': 'bg-pink-100 text-pink-800 border-pink-200',
-      'Other': 'bg-gray-100 text-gray-800 border-gray-200'
-    };
-    return colors[businessType] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
+
 
   const getStatusColor = (status: string) => {
     const colors = {
@@ -176,20 +163,7 @@ export const Products: React.FC = () => {
     return icons[category] || '📦';
   };
 
-  const getBusinessTypeIcon = (businessType: string) => {
-    const icons = {
-      'PMS': '🏨',
-      'CRS': '💻',
-      'ChannelManager': '📡',
-      'GDS': '🌍',
-      'Connectivity': '🔗',
-      'Business Intelligence': '📊',
-      'Revenue Management': '💰',
-      'Distribution': '📈',
-      'Other': '📦'
-    };
-    return icons[businessType] || '📦';
-  };
+
 
   const filteredAndSortedProducts = products
     .filter(product => {
@@ -200,11 +174,11 @@ export const Products: React.FC = () => {
         product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.subcategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (account?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (account?.industry || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+
         (product.tags || []).some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       );
       
-      const matchesBusinessType = businessTypeFilter === 'All' || account?.industry === businessTypeFilter;
+      const matchesBusinessType = businessTypeFilter === 'All';
       const matchesStatus = statusFilter === 'All' || product.status === statusFilter;
       const matchesAccount = accountFilter === 'All' || product.accountId === accountFilter;
       
@@ -219,9 +193,8 @@ export const Products: React.FC = () => {
           bValue = b.name.toLowerCase();
           break;
         case 'category':
-          // Sort by account business type instead of product category
-          aValue = getAccount(a.accountId)?.industry || 'Other';
-          bValue = getAccount(b.accountId)?.industry || 'Other';
+          aValue = a.category;
+          bValue = b.category;
           break;
         case 'subcategory':
           aValue = a.subcategory;
@@ -263,17 +236,7 @@ export const Products: React.FC = () => {
     return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-0 group-hover:opacity-50" />;
   };
 
-  const BUSINESS_TYPES: Industry[] = [
-    'PMS',
-    'CRS', 
-    'ChannelManager',
-    'GDS',
-    'Connectivity',
-    'Business Intelligence', 
-    'Revenue Management', 
-    'Distribution',
-    'Other'
-  ];
+
   
   const STATUSES = ['Active', 'Deprecated', 'Development', 'Beta'];
 
@@ -300,9 +263,7 @@ export const Products: React.FC = () => {
         return {
           'Product Name': product.name,
           'Account Name': account?.name || 'Unknown Account',
-          'Account Industry': account?.industry || '',
-          'Account Region': account?.region || '',
-          'Business Type': account?.industry || 'Other',
+          'Account Headoffice Country': account?.region || '',
           'Product Category': product.category,
           'Product Subcategory': product.subcategory,
           'Status': product.status,
@@ -415,16 +376,7 @@ export const Products: React.FC = () => {
           </div>
           
           <div className="flex gap-3">
-            <select
-              value={businessTypeFilter}
-              onChange={(e) => setBusinessTypeFilter(e.target.value as Industry | 'All')}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
-            >
-              <option value="All">All Business Types</option>
-              {BUSINESS_TYPES.map(businessType => (
-                <option key={businessType} value={businessType}>{businessType}</option>
-              ))}
-            </select>
+
             
             <select
               value={statusFilter}
@@ -551,7 +503,7 @@ export const Products: React.FC = () => {
                         <td className="px-6 py-4">
                           <div className="flex items-center">
                             <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
-                              <span className="text-lg">{getBusinessTypeIcon(account?.industry || 'Other')}</span>
+                              <span className="text-lg">📦</span>
                             </div>
                             <div className="max-w-48">
                               <div className="text-sm font-medium text-gray-900 line-clamp-1">
@@ -584,7 +536,7 @@ export const Products: React.FC = () => {
                                 {account?.name || 'Unknown Account'}
                               </div>
                               <div className="text-xs text-gray-500">
-                                {account?.industry} • {account?.region}
+                                {account?.region}
                               </div>
                             </div>
                           </div>
@@ -593,11 +545,11 @@ export const Products: React.FC = () => {
                         {/* Category & Type */}
                         <td className="px-6 py-4">
                           <div className="space-y-1">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getBusinessTypeColor(account?.industry || 'Other')}`}>
-                              {account?.industry || 'Other'}
-                            </span>
+                            <div className="text-sm font-medium text-gray-900">
+                              {product.category}
+                            </div>
                             <div className="text-xs text-gray-500">
-                              {product.category} • {product.subcategory}
+                              {product.subcategory}
                             </div>
                           </div>
                         </td>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import type { Task, TaskStatus, Opportunity, Activity, ActivityStatus, Account, Contact } from '../types';
+import type { Task, TaskStatus, Opportunity, Activity, ActivityStatus, Account, Contact, ChecklistItem } from '../types';
 import { ListView } from '../components/ListView';
 import { TaskBoard } from '../components/TaskBoard';
 import { getDocuments, updateDocument } from '../lib/firestore';
@@ -18,7 +18,8 @@ import {
   Plus,
   Edit3,
   Save,
-  X
+  X,
+  CheckSquare
 } from 'lucide-react';
 
 interface TaskStats {
@@ -47,11 +48,20 @@ interface EnhancedTask {
   bucket?: string;
 }
 
+interface OpportunityWithTodos {
+  id: string;
+  title: string;
+  accountName: string;
+  stage: string;
+  uncompletedTodos: ChecklistItem[];
+}
+
 export const Tasks: React.FC = () => {
   const [activities, setActivities] = useState<EnhancedTask[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [opportunitiesWithTodos, setOpportunitiesWithTodos] = useState<OpportunityWithTodos[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'board' | 'scheduled'>('scheduled');
@@ -123,10 +133,51 @@ export const Tasks: React.FC = () => {
       
       setActivities(allActivities);
       setNotesText(initialNotesText);
+
+      // Process opportunities with uncompleted todos
+      const oppsWithTodos: OpportunityWithTodos[] = opps
+        .map(opp => {
+          const account = accs.find(a => a.id === opp.accountId);
+          const uncompletedTodos = (opp.checklist || []).filter(item => !item.completed);
+          
+          return {
+            id: opp.id,
+            title: opp.title,
+            accountName: account?.name || 'Unknown Account',
+            stage: opp.stage,
+            uncompletedTodos
+          };
+        })
+        .filter(opp => opp.uncompletedTodos.length > 0); // Only include opportunities with uncompleted todos
+      
+      setOpportunitiesWithTodos(oppsWithTodos);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleTodoItem = async (opportunityId: string, itemId: string) => {
+    try {
+      const opportunity = opportunities.find(o => o.id === opportunityId);
+      if (!opportunity) return;
+
+      const updatedChecklist = opportunity.checklist?.map(item =>
+        item.id === itemId 
+          ? { ...item, completed: !item.completed, completedAt: !item.completed ? new Date() : undefined }
+          : item
+      ) || [];
+
+      await updateDocument('opportunities', opportunityId, {
+        checklist: updatedChecklist,
+        updatedAt: new Date()
+      });
+
+      // Refresh data
+      await fetchData();
+    } catch (error) {
+      console.error('Error toggling todo item:', error);
     }
   };
 
@@ -361,6 +412,17 @@ export const Tasks: React.FC = () => {
     }
   };
 
+  const getStageColor = (stage: string) => {
+    switch (stage) {
+      case 'Discovery': return 'bg-blue-100 text-blue-800';
+      case 'Proposal': return 'bg-yellow-100 text-yellow-800';
+      case 'Negotiation': return 'bg-orange-100 text-orange-800';
+      case 'Closed-Won': return 'bg-green-100 text-green-800';
+      case 'Closed-Lost': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   const columns = [
     { 
       key: 'title' as keyof EnhancedTask, 
@@ -398,18 +460,23 @@ export const Tasks: React.FC = () => {
       key: 'dueDate' as keyof EnhancedTask, 
       label: 'Due Date',
       render: (dueDate: any) => format(dueDate.toDate(), 'MMM d, yyyy')
-    },
-    { 
-      key: 'opportunityTitle' as keyof EnhancedTask, 
-      label: 'Opportunity',
-      render: (opportunityTitle: string, task: EnhancedTask) => (
-        <div>
-          <div className="font-medium">{opportunityTitle}</div>
-          <div className="text-sm text-gray-500">{task.accountName}</div>
-        </div>
-      )
     }
   ];
+
+  // Group tasks by opportunity for list view
+  const groupTasksByOpportunity = () => {
+    const groups: { [key: string]: EnhancedTask[] } = {};
+    
+    filteredTasks.forEach(task => {
+      const key = `${task.opportunityTitle} (${task.accountName})`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(task);
+    });
+    
+    return groups;
+  };
 
   if (loading) {
     return (
@@ -426,43 +493,12 @@ export const Tasks: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Activities & Tasks</h1>
-            <p className="text-gray-600 mt-1">Track all scheduled activities and tasks across opportunities</p>
+            <p className="text-gray-600 mt-1">Track all scheduled activities and manage to-do items across opportunities</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center bg-gray-100 rounded-lg p-1">
-              <button
-                onClick={() => setViewMode('scheduled')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'scheduled' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
-                }`}
-              >
-                <Calendar className="h-4 w-4 inline mr-1" />
-                Scheduled
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
-                }`}
-              >
-                <List className="h-4 w-4 inline mr-1" />
-                List
-              </button>
-              <button
-                onClick={() => setViewMode('board')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  viewMode === 'board' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
-                }`}
-              >
-                <LayoutGrid className="h-4 w-4 inline mr-1" />
-                Board
-              </button>
-            </div>
-            <Link to="/opportunities/new" className="btn-primary flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add Opportunity
-            </Link>
-          </div>
+          <Link to="/opportunities/new" className="btn-primary flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add Opportunity
+          </Link>
         </div>
       </div>
 
@@ -519,273 +555,432 @@ export const Tasks: React.FC = () => {
         </div>
       </div>
 
-      {/* 7-Day Calendar View */}
-      {viewMode === 'scheduled' && (
-        <div className="px-6 py-3 bg-gray-900 border-b border-gray-700">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-white">Next 7 Days</h3>
-            {selectedDate && (
-              <button
-                onClick={() => setSelectedDate(null)}
-                className="text-xs text-iol-red hover:text-red-400 transition-colors"
-              >
-                Clear filter
-              </button>
-            )}
+      {/* Main Content - 2 Column Layout */}
+      <div className="flex-1 flex overflow-hidden gap-6 p-6">
+        {/* Left Column - Calendar and Activities */}
+        <div className="flex-1 flex flex-col bg-white rounded-lg shadow-sm">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-gray-200 rounded-t-lg">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-iol-red" />
+              Activities & Tasks
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Schedule and track activities across all opportunities
+            </p>
           </div>
-          <div className="grid grid-cols-7 gap-1">
-            {next7Days.map((date, index) => {
-              const tasksCount = getTasksForDate(date).length;
-              const isSelected = selectedDate && isSameDay(date, selectedDate);
-              const isCurrentDay = isToday(date);
-              
-              return (
-                <button
-                  key={index}
-                  onClick={() => setSelectedDate(isSelected ? null : date)}
-                  className={`p-2 rounded-md transition-all ${
-                    isSelected 
-                      ? 'bg-iol-red text-white shadow-lg' 
-                      : isCurrentDay
-                      ? 'bg-gray-700 text-blue-400 border border-blue-400'
-                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-600'
-                  }`}
-                >
-                  <div className="text-center">
-                    <p className={`text-xs font-medium ${
-                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-400' : 'text-gray-400'
-                    }`}>
-                      {format(date, 'EEE')}
-                    </p>
-                    <p className={`text-sm font-bold mt-0.5 ${
-                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-400' : 'text-gray-200'
-                    }`}>
-                      {format(date, 'd')}
-                    </p>
-                    {tasksCount > 0 && (
-                      <div className={`mt-1 w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold mx-auto ${
+
+
+
+          {/* 7-Day Calendar View */}
+          {viewMode === 'scheduled' && (
+            <div className="px-6 py-3 bg-white border-b border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-900">Next 7 Days</h3>
+                {selectedDate && (
+                  <button
+                    onClick={() => setSelectedDate(null)}
+                    className="text-xs text-iol-red hover:text-red-400 transition-colors"
+                  >
+                    Clear filter
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {next7Days.map((date, index) => {
+                  const tasksCount = getTasksForDate(date).length;
+                  const isSelected = selectedDate && isSameDay(date, selectedDate);
+                  const isCurrentDay = isToday(date);
+                  
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => setSelectedDate(isSelected ? null : date)}
+                      className={`p-2 rounded-md transition-all ${
                         isSelected 
-                          ? 'bg-white text-iol-red'
+                          ? 'bg-iol-red text-white shadow-lg' 
                           : isCurrentDay
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-iol-red text-white'
-                      }`}>
-                        {tasksCount}
+                          ? 'bg-gray-200 text-blue-600 border border-blue-400'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                      }`}
+                    >
+                      <div className="text-center">
+                        <p className={`text-xs font-medium ${
+                          isSelected ? 'text-white' : isCurrentDay ? 'text-blue-600' : 'text-gray-500'
+                        }`}>
+                          {format(date, 'EEE')}
+                        </p>
+                        <p className={`text-sm font-bold mt-0.5 ${
+                          isSelected ? 'text-white' : isCurrentDay ? 'text-blue-600' : 'text-gray-900'
+                        }`}>
+                          {format(date, 'd')}
+                        </p>
+                        {tasksCount > 0 && (
+                          <div className={`mt-1 w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold mx-auto ${
+                            isSelected 
+                              ? 'bg-white text-iol-red'
+                              : isCurrentDay
+                              ? 'bg-blue-500 text-white'
+                              : 'bg-iol-red text-white'
+                          }`}>
+                            {tasksCount}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-      {/* Search Bar */}
-      {viewMode === 'scheduled' && (
-        <div className="px-6 py-3 bg-white border-b border-gray-200">
-          <div className="relative max-w-md">
-            <input
-              type="text"
-              placeholder="Search activities..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-4 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-iol-red focus:border-transparent"
-            />
-          </div>
-        </div>
-      )}
+                     {/* Search Bar and View Mode Toggle */}
+           <div className="px-6 py-3 bg-white border-b border-gray-200">
+             <div className="flex items-center justify-between gap-4">
+               <div className="relative max-w-md">
+                 <input
+                   type="text"
+                   placeholder="Search activities..."
+                   value={searchTerm}
+                   onChange={(e) => setSearchTerm(e.target.value)}
+                   className="pl-4 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-iol-red focus:border-transparent"
+                 />
+               </div>
+               <div className="flex items-center bg-gray-100 rounded-lg p-1">
+                 <button
+                   onClick={() => setViewMode('scheduled')}
+                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                     viewMode === 'scheduled' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
+                   }`}
+                 >
+                   <Calendar className="h-4 w-4 inline mr-1" />
+                   Scheduled
+                 </button>
+                 <button
+                   onClick={() => setViewMode('list')}
+                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                     viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
+                   }`}
+                 >
+                   <List className="h-4 w-4 inline mr-1" />
+                   List
+                 </button>
+                 <button
+                   onClick={() => setViewMode('board')}
+                   className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                     viewMode === 'board' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
+                   }`}
+                 >
+                   <LayoutGrid className="h-4 w-4 inline mr-1" />
+                   Board
+                 </button>
+               </div>
+             </div>
+           </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden">
-        {viewMode === 'scheduled' ? (
-          <div className="h-full overflow-auto p-6">
-            <div className="space-y-6">
-              {Object.entries(groupedTasks).map(([groupKey, groupTasks]) => {
-                if (groupTasks.length === 0) return null;
-                
-                const groupTitles = {
-                  overdue: 'Overdue',
-                  today: 'Today',
-                  tomorrow: 'Tomorrow',
-                  thisWeek: 'This Week',
-                  later: 'Later'
-                };
+          {/* Activities Content */}
+          <div className="flex-1 overflow-hidden">
+            {viewMode === 'scheduled' ? (
+              <div className="h-full overflow-auto p-6">
+                <div className="space-y-6">
+                  {Object.entries(groupedTasks).map(([groupKey, groupTasks]) => {
+                    if (groupTasks.length === 0) return null;
+                    
+                    const groupTitles = {
+                      overdue: 'Overdue',
+                      today: 'Today',
+                      tomorrow: 'Tomorrow',
+                      thisWeek: 'This Week',
+                      later: 'Later'
+                    };
 
-                const groupColors = {
-                  overdue: 'text-red-600 border-red-200',
-                  today: 'text-orange-600 border-orange-200',
-                  tomorrow: 'text-blue-600 border-blue-200',
-                  thisWeek: 'text-purple-600 border-purple-200',
-                  later: 'text-gray-600 border-gray-200'
-                };
+                    const groupColors = {
+                      overdue: 'text-red-600 border-red-200',
+                      today: 'text-orange-600 border-orange-200',
+                      tomorrow: 'text-blue-600 border-blue-200',
+                      thisWeek: 'text-purple-600 border-purple-200',
+                      later: 'text-gray-600 border-gray-200'
+                    };
 
-                return (
-                  <div key={groupKey} className="bg-white rounded-lg border border-gray-200">
-                    <div className={`px-4 py-3 border-b ${groupColors[groupKey as keyof typeof groupColors]}`}>
-                      <h3 className="font-medium">
-                        {groupTitles[groupKey as keyof typeof groupTitles]} ({groupTasks.length})
-                      </h3>
-                    </div>
-                    <div className="p-4 space-y-4">
-                      {groupTasks.map((task) => (
-                        <div
-                          key={task.id}
-                          className="border border-gray-200 rounded-lg overflow-hidden"
-                        >
-                          {/* Main task content */}
-                          <div
-                            onClick={() => handleRowClick(task)}
-                            className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer transition-colors"
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3">
-                                <span className="text-lg">{getActivityIcon(task.activityType)}</span>
+                    return (
+                      <div key={groupKey} className="bg-white rounded-lg border border-gray-200">
+                        <div className={`px-4 py-3 border-b ${groupColors[groupKey as keyof typeof groupColors]}`}>
+                          <h3 className="font-medium">
+                            {groupTitles[groupKey as keyof typeof groupTitles]} ({groupTasks.length})
+                          </h3>
+                        </div>
+                        <div className="p-4 space-y-4">
+                          {groupTasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className="border border-gray-200 rounded-lg overflow-hidden"
+                            >
+                              {/* Main task content */}
+                              <div
+                                onClick={() => handleRowClick(task)}
+                                className="flex items-center justify-between p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                              >
                                 <div className="flex-1">
-                                  <h4 className="font-medium text-gray-900">{task.title}</h4>
-                                  <div className="flex items-center gap-3 mt-1">
-                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(task.status)}`}>
-                                      {task.status}
-                                    </span>
-                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(task.priority)}`}>
-                                      {task.priority}
-                                    </span>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-lg">{getActivityIcon(task.activityType)}</span>
+                                    <div className="flex-1">
+                                      <h4 className="font-medium text-gray-900">{task.title}</h4>
+                                      <div className="flex items-center gap-3 mt-1">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(task.status)}`}>
+                                          {task.status}
+                                        </span>
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(task.priority)}`}>
+                                          {task.priority}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                    <span>👤 {task.assignedTo}</span>
+                                    <span>📅 {format(task.dueDate.toDate(), 'MMM d, yyyy')}</span>
+                                    <span>🎯 {task.opportunityTitle}</span>
+                                    <span>🏢 {task.accountName}</span>
+                                    {task.relatedContacts.length > 0 && (
+                                      <span>👥 {task.relatedContacts.join(', ')}</span>
+                                    )}
                                   </div>
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
-                                <span>👤 {task.assignedTo}</span>
-                                <span>📅 {format(task.dueDate.toDate(), 'MMM d, yyyy')}</span>
-                                <span>🎯 {task.opportunityTitle}</span>
-                                <span>🏢 {task.accountName}</span>
-                                {task.relatedContacts.length > 0 && (
-                                  <span>👥 {task.relatedContacts.join(', ')}</span>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {task.status === 'Scheduled' && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleCompleteActivity(task.id);
-                                  }}
-                                  className="text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
-                                >
-                                  <CheckCircle className="h-3 w-3" />
-                                  Complete
-                                </button>
-                              )}
-                              {task.status === 'Completed' && (
-                                <span className="text-sm text-green-600 flex items-center gap-1">
-                                  <CheckCircle className="h-3 w-3" />
-                                  Completed
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Notes section */}
-                          <div className="px-3 pb-3 border-t border-gray-100">
-                            <div className="flex items-start justify-between mb-2">
-                              <h5 className="text-sm font-medium text-gray-700 flex items-center gap-1">
-                                📝 Notes
-                              </h5>
-                              {!editingNotes[task.id] && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditNotes(task.id);
-                                  }}
-                                  className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                                >
-                                  <Edit3 className="h-3 w-3" />
-                                  Edit
-                                </button>
-                              )}
-                            </div>
-
-                            {editingNotes[task.id] ? (
-                              <div className="space-y-2">
-                                <textarea
-                                  value={notesText[task.id] || ''}
-                                  onChange={(e) => handleNotesChange(task.id, e.target.value)}
-                                  placeholder="Add notes or comments about this activity..."
-                                  className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-iol-red focus:border-transparent resize-none"
-                                  rows={3}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
                                 <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSaveNotes(task.id);
-                                    }}
-                                    disabled={savingNotes[task.id]}
-                                    className="text-sm bg-iol-red hover:bg-iol-red-dark text-white px-3 py-1 rounded transition-colors flex items-center gap-1 disabled:opacity-50"
-                                  >
-                                    <Save className="h-3 w-3" />
-                                    {savingNotes[task.id] ? 'Saving...' : 'Save'}
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleCancelEditNotes(task.id);
-                                    }}
-                                    className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded transition-colors flex items-center gap-1"
-                                  >
-                                    <X className="h-3 w-3" />
-                                    Cancel
-                                  </button>
+                                  {task.status === 'Scheduled' && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCompleteActivity(task.id);
+                                      }}
+                                      className="text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                    >
+                                      <CheckCircle className="h-3 w-3" />
+                                      Complete
+                                    </button>
+                                  )}
+                                  {task.status === 'Completed' && (
+                                    <span className="text-sm text-green-600 flex items-center gap-1">
+                                      <CheckCircle className="h-3 w-3" />
+                                      Completed
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                            ) : (
-                              <div 
-                                className="text-sm text-gray-600 min-h-[2rem] cursor-text"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditNotes(task.id);
-                                }}
-                              >
-                                {task.notes || (
-                                  <span className="text-gray-400 italic">Click to add notes...</span>
+
+                              {/* Notes section */}
+                              <div className="px-3 pb-3 border-t border-gray-100">
+                                <div className="flex items-start justify-between mb-2">
+                                  <h5 className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                                    📝 Notes
+                                  </h5>
+                                  {!editingNotes[task.id] && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEditNotes(task.id);
+                                      }}
+                                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
+                                    >
+                                      <Edit3 className="h-3 w-3" />
+                                      Edit
+                                    </button>
+                                  )}
+                                </div>
+
+                                {editingNotes[task.id] ? (
+                                  <div className="space-y-2">
+                                    <textarea
+                                      value={notesText[task.id] || ''}
+                                      onChange={(e) => handleNotesChange(task.id, e.target.value)}
+                                      placeholder="Add notes or comments about this activity..."
+                                      className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-iol-red focus:border-transparent resize-none"
+                                      rows={3}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleSaveNotes(task.id);
+                                        }}
+                                        disabled={savingNotes[task.id]}
+                                        className="text-sm bg-iol-red hover:bg-iol-red-dark text-white px-3 py-1 rounded transition-colors flex items-center gap-1 disabled:opacity-50"
+                                      >
+                                        <Save className="h-3 w-3" />
+                                        {savingNotes[task.id] ? 'Saving...' : 'Save'}
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCancelEditNotes(task.id);
+                                        }}
+                                        className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                      >
+                                        <X className="h-3 w-3" />
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div 
+                                    className="text-sm text-gray-600 min-h-[2rem] cursor-text"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditNotes(task.id);
+                                    }}
+                                  >
+                                    {task.notes || (
+                                      <span className="text-gray-400 italic">Click to add notes...</span>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {Object.values(groupedTasks).every(group => group.length === 0) && (
+                    <div className="text-center py-12 text-gray-500">
+                      <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                      <p className="text-lg font-medium">No scheduled activities found</p>
+                      <p className="text-sm mt-1">Activities are completed or try adjusting your search.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+                         ) : viewMode === 'list' ? (
+               <div className="h-full overflow-auto p-6">
+                 <div className="space-y-6">
+                   {Object.entries(groupTasksByOpportunity()).map(([opportunityKey, tasks]) => (
+                     <div key={opportunityKey} className="bg-white rounded-lg border border-gray-200">
+                       <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                         <h3 className="font-medium text-gray-900">{opportunityKey}</h3>
+                         <p className="text-sm text-gray-600">{tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
+                       </div>
+                       <div className="overflow-x-auto">
+                         <table className="min-w-full divide-y divide-gray-200">
+                           <thead className="bg-gray-50">
+                             <tr>
+                               {columns.map((column) => (
+                                 <th
+                                   key={column.key}
+                                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                 >
+                                   {column.label}
+                                 </th>
+                               ))}
+                             </tr>
+                           </thead>
+                           <tbody className="bg-white divide-y divide-gray-200">
+                             {tasks.map((task) => (
+                               <tr
+                                 key={task.id}
+                                 onClick={() => handleRowClick(task)}
+                                 className="hover:bg-gray-50 cursor-pointer transition-colors"
+                               >
+                                 {columns.map((column) => (
+                                   <td key={column.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                     {column.render
+                                       ? column.render(task[column.key] as any, task)
+                                       : String(task[column.key])
+                                     }
+                                   </td>
+                                 ))}
+                               </tr>
+                             ))}
+                           </tbody>
+                         </table>
+                       </div>
+                     </div>
+                   ))}
+                   
+                   {Object.keys(groupTasksByOpportunity()).length === 0 && (
+                     <div className="text-center py-12 text-gray-500">
+                       <List className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                       <p className="text-lg font-medium">No activities found</p>
+                       <p className="text-sm mt-1">Try adjusting your search or view different activities.</p>
+                     </div>
+                   )}
+                 </div>
+               </div>
+             ) : (
+              <TaskBoard
+                tasks={filteredTasks}
+                onTaskClick={handleRowClick}
+                onStatusChange={() => {}} // Not used anymore
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Right Column - Opportunity To-Do Items */}
+        <div className="flex-1 bg-white rounded-lg shadow-sm flex flex-col">
+          <div className="px-6 py-4 border-b border-gray-200 rounded-t-lg">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <CheckSquare className="h-5 w-5 text-iol-red" />
+              Opportunity To-Do Items
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Uncompleted checklist items across all opportunities
+            </p>
+          </div>
+
+          <div className="flex-1 overflow-auto p-6">
+            {opportunitiesWithTodos.length > 0 ? (
+              <div className="space-y-6">
+                {opportunitiesWithTodos.map(opportunity => (
+                  <div key={opportunity.id} className="bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="px-4 py-3 border-b border-gray-200 bg-white rounded-t-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-medium text-gray-900">{opportunity.title}</h3>
+                          <p className="text-sm text-gray-500">{opportunity.accountName}</p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStageColor(opportunity.stage)}`}>
+                          {opportunity.stage}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-3">
+                      {opportunity.uncompletedTodos.map(todo => (
+                        <div key={todo.id} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200">
+                          <button
+                            onClick={() => handleToggleTodoItem(opportunity.id, todo.id)}
+                            className="mt-0.5 w-4 h-4 border-2 border-gray-300 rounded hover:border-iol-red focus:outline-none focus:border-iol-red transition-colors flex-shrink-0"
+                          >
+                            <span className="sr-only">Mark as complete</span>
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-900 break-words">{todo.text}</p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Added {format(todo.createdAt.toDate(), 'MMM d, yyyy')}
+                            </p>
                           </div>
+                          <Link
+                            to={`/opportunities/${opportunity.id}`}
+                            className="text-iol-red hover:text-iol-red-dark text-xs flex items-center gap-1 flex-shrink-0"
+                          >
+                            View
+                          </Link>
                         </div>
                       ))}
                     </div>
                   </div>
-                );
-              })}
-
-              {Object.values(groupedTasks).every(group => group.length === 0) && (
-                <div className="text-center py-12 text-gray-500">
-                  <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p className="text-lg font-medium">No scheduled activities found</p>
-                  <p className="text-sm mt-1">Activities are completed or try adjusting your search.</p>
-                </div>
-              )}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <CheckSquare className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium">No pending to-do items</p>
+                <p className="text-sm mt-1">All checklist items are completed or no opportunities have checklists.</p>
+              </div>
+            )}
           </div>
-        ) : viewMode === 'list' ? (
-          <ListView
-            title=""
-            data={filteredTasks}
-            columns={columns}
-            onRowClick={handleRowClick}
-            searchTerm={searchTerm}
-            onSearchChange={setSearchTerm}
-            loading={loading}
-          />
-        ) : (
-          <TaskBoard
-            tasks={filteredTasks}
-            onTaskClick={handleRowClick}
-            onStatusChange={() => {}} // Not used anymore
-          />
-        )}
+        </div>
       </div>
     </div>
   );

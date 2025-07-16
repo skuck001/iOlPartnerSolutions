@@ -25,12 +25,12 @@ import {
   Star
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { Account, Industry, CompanySize, Contact, Product, Opportunity } from '../types';
+import type { Account, Contact, Product, Opportunity } from '../types';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 import { getUserDisplayName, getUserById } from '../lib/userUtils';
 
-type SortField = 'name' | 'industry' | 'region' | 'status' | 'companySize' | 'createdAt';
+type SortField = 'name' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
 export const Accounts: React.FC = () => {
@@ -43,9 +43,7 @@ export const Accounts: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [industryFilter, setIndustryFilter] = useState<Industry | 'All'>('All');
-  const [statusFilter, setStatusFilter] = useState<string>('All');
-  const [regionFilter, setRegionFilter] = useState<string>('All');
+
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -147,41 +145,7 @@ export const Accounts: React.FC = () => {
     navigate('/accounts/new');
   };
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      'Active': 'bg-green-100 text-green-800 border-green-200',
-      'Inactive': 'bg-gray-100 text-gray-800 border-gray-200',
-      'Prospect': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Partner': 'bg-purple-100 text-purple-800 border-purple-200'
-    };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800 border-gray-200';
-  };
 
-  const getCompanySizeColor = (size: CompanySize) => {
-    const colors = {
-      'Startup': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'Small': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Medium': 'bg-green-100 text-green-800 border-green-200',
-      'Large': 'bg-orange-100 text-orange-800 border-orange-200',
-      'Enterprise': 'bg-purple-100 text-purple-800 border-purple-200'
-    };
-    return colors[size];
-  };
-
-  const getIndustryIcon = (industry: Industry) => {
-    const icons = {
-      'PMS': '🏨',
-      'CRS': '📅',
-      'ChannelManager': '🔗',
-      'GDS': '🌐',
-      'Connectivity': '⚡',
-      'Business Intelligence': '📊',
-      'Revenue Management': '💰',
-      'Distribution': '📈',
-      'Other': '🏢'
-    };
-    return icons[industry] || '🏢';
-  };
 
   const filteredAndSortedAccounts = accounts
     .filter(account => {
@@ -192,11 +156,7 @@ export const Accounts: React.FC = () => {
         (account.tags || []).some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
       );
       
-      const matchesIndustry = industryFilter === 'All' || account.industry === industryFilter;
-      const matchesStatus = statusFilter === 'All' || account.status === statusFilter;
-      const matchesRegion = regionFilter === 'All' || account.region === regionFilter;
-      
-      return matchesSearch && matchesIndustry && matchesStatus && matchesRegion;
+      return matchesSearch;
     })
     .sort((a, b) => {
       let aValue: any, bValue: any;
@@ -205,23 +165,6 @@ export const Accounts: React.FC = () => {
         case 'name':
           aValue = a.name.toLowerCase();
           bValue = b.name.toLowerCase();
-          break;
-        case 'industry':
-          aValue = a.industry;
-          bValue = b.industry;
-          break;
-        case 'region':
-          aValue = a.region.toLowerCase();
-          bValue = b.region.toLowerCase();
-          break;
-        case 'status':
-          aValue = a.status;
-          bValue = b.status;
-          break;
-        case 'companySize':
-          const sizeOrder = { 'Startup': 1, 'Small': 2, 'Medium': 3, 'Large': 4, 'Enterprise': 5 };
-          aValue = sizeOrder[a.companySize || 'Small'];
-          bValue = sizeOrder[b.companySize || 'Small'];
           break;
         case 'createdAt':
           aValue = a.createdAt.toMillis();
@@ -251,10 +194,7 @@ export const Accounts: React.FC = () => {
     return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-0 group-hover:opacity-50" />;
   };
 
-  const INDUSTRIES: Industry[] = ['PMS', 'CRS', 'ChannelManager', 'GDS', 'Connectivity', 'Business Intelligence', 'Revenue Management', 'Distribution', 'Other'];
-  const STATUSES = ['Active', 'Inactive', 'Prospect', 'Partner'];
 
-  const uniqueRegions = Array.from(new Set(accounts.map(a => a.region))).sort();
 
   const handleExportToExcel = () => {
     try {
@@ -275,10 +215,7 @@ export const Accounts: React.FC = () => {
 
         return {
           'Account Name': account.name,
-          'Industry': account.industry,
-          'Region': account.region,
-          'Status': account.status,
-          'Company Size': account.companySize || '',
+          'Headoffice Country': account.region,
           'Headquarters': account.headquarters || '',
           'Website': account.website || '',
           'Description': account.description || '',
@@ -380,47 +317,14 @@ export const Accounts: React.FC = () => {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <input
               type="text"
-              placeholder="Search accounts, regions, or tags..."
+              placeholder="Search accounts or tags..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
             />
           </div>
           
-          <div className="flex gap-3">
-            <select
-              value={industryFilter}
-              onChange={(e) => setIndustryFilter(e.target.value as Industry | 'All')}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
-            >
-              <option value="All">All Industries</option>
-              {INDUSTRIES.map(industry => (
-                <option key={industry} value={industry}>{industry}</option>
-              ))}
-            </select>
-            
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
-            >
-              <option value="All">All Statuses</option>
-              {STATUSES.map(status => (
-                <option key={status} value={status}>{status}</option>
-              ))}
-            </select>
 
-            <select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value)}
-              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
-            >
-              <option value="All">All Regions</option>
-              {uniqueRegions.map(region => (
-                <option key={region} value={region}>{region}</option>
-              ))}
-            </select>
-          </div>
         </div>
       </div>
 
@@ -435,11 +339,11 @@ export const Accounts: React.FC = () => {
             <Building2 className="h-12 w-12 text-gray-300 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No accounts found</h3>
             <p className="text-sm text-gray-500 mb-4">
-              {searchTerm || industryFilter !== 'All' || statusFilter !== 'All' || regionFilter !== 'All'
-                ? 'Try adjusting your search or filters' 
+              {searchTerm
+                ? 'Try adjusting your search' 
                 : 'Get started by creating your first account'}
             </p>
-            {!searchTerm && industryFilter === 'All' && statusFilter === 'All' && regionFilter === 'All' && (
+            {!searchTerm && (
               <button
                 onClick={handleAdd}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
@@ -464,33 +368,7 @@ export const Accounts: React.FC = () => {
                         {getSortIcon('name')}
                       </div>
                     </th>
-                    <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
-                      onClick={() => handleSort('industry')}
-                    >
-                      <div className="flex items-center">
-                        Industry
-                        {getSortIcon('industry')}
-                      </div>
-                    </th>
-                    <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
-                      onClick={() => handleSort('region')}
-                    >
-                      <div className="flex items-center">
-                        Region & Size
-                        {getSortIcon('region')}
-                      </div>
-                    </th>
-                    <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
-                      onClick={() => handleSort('status')}
-                    >
-                      <div className="flex items-center">
-                        Status
-                        {getSortIcon('status')}
-                      </div>
-                    </th>
+
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contacts
                     </th>
@@ -540,7 +418,7 @@ export const Accounts: React.FC = () => {
                               {account.logo ? (
                                 <img src={account.logo} alt={account.name} className="h-8 w-8 rounded" />
                               ) : (
-                                <span className="text-lg">{getIndustryIcon(account.industry)}</span>
+                                <span className="text-lg">🏢</span>
                               )}
                             </div>
                             <div className="max-w-48">
@@ -565,35 +443,7 @@ export const Accounts: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* Industry */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <span className="text-lg mr-2">{getIndustryIcon(account.industry)}</span>
-                            <span className="text-sm text-gray-900">{account.industry}</span>
-                          </div>
-                        </td>
 
-                        {/* Region & Size */}
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            <div className="flex items-center">
-                              <MapPin className="h-3 w-3 text-gray-400 mr-1" />
-                              <span className="text-sm text-gray-900">{account.region}</span>
-                            </div>
-                            {account.companySize && (
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getCompanySizeColor(account.companySize)}`}>
-                                {account.companySize}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Status */}
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(account.status)}`}>
-                            {account.status}
-                          </span>
-                        </td>
 
                         {/* Contacts */}
                         <td className="px-6 py-4">

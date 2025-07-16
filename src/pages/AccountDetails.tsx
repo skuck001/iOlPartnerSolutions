@@ -21,16 +21,6 @@ import { format } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
 
-const INDUSTRIES = [
-  { value: 'PMS', label: 'PMS: Property Management System' },
-  { value: 'GDS', label: 'GDS: Global Distribution System' },
-  { value: 'CRS', label: 'CRS: Central Reservation System' },
-  { value: 'CM', label: 'CM: Channel Manager' },
-  { value: 'PAY', label: 'PAY: Payment Solutions' },
-  { value: 'BE', label: 'BE: Booking Engine' },
-  { value: 'RMS', label: 'RMS: Revenue Management System' }
-];
-
 export const AccountDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -55,7 +45,6 @@ export const AccountDetails: React.FC = () => {
   
   const [formData, setFormData] = useState({
     name: '',
-    industry: 'PMS' as Account['industry'],
     region: '',
     website: '',
     parentAccountId: '',
@@ -96,7 +85,6 @@ export const AccountDetails: React.FC = () => {
           setAccount(accountTyped);
           setFormData({
             name: accountTyped.name,
-            industry: accountTyped.industry,
             region: accountTyped.region,
             website: accountTyped.website || '',
             parentAccountId: accountTyped.parentAccountId || '',
@@ -293,29 +281,13 @@ export const AccountDetails: React.FC = () => {
                     </div>
                     
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Industry</label>
-                      <select
-                        value={formData.industry}
-                        onChange={(e) => setFormData({ ...formData, industry: e.target.value as Account['industry'] })}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        required
-                      >
-                        {INDUSTRIES.map((industry) => (
-                          <option key={industry.value} value={industry.value}>
-                            {industry.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Headoffice Country</label>
                       <input
                         type="text"
                         value={formData.region}
                         onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="e.g., North America, EMEA, APAC"
+                        placeholder="e.g., United States, United Kingdom, Germany"
                         required
                       />
                     </div>

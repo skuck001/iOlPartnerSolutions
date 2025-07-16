@@ -630,7 +630,7 @@ export const Dashboard: React.FC = () => {
                         {account && (
                           <p className="text-sm text-gray-600 mb-2">
                             <Building className="h-3 w-3 inline mr-1" />
-                            {account.name} • {account.industry}
+                            {account.name}
                           </p>
                         )}
                         

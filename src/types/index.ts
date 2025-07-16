@@ -1,4 +1,4 @@
-export type { Industry, CompanySize } from './Account';
+// Account types (Industry and CompanySize removed)
 export type { Account } from './Account';
 export type { ContactType } from './Contact';
 export type { Contact } from './Contact';

@@ -263,7 +263,7 @@ export const Opportunities: React.FC = () => {
       return {
         'Opportunity Title': opportunity.title,
         'Account Name': account?.name || 'Unknown Account',
-        'Account Industry': account?.industry || '',
+        
         'Product Name': product?.name || '',
         'Stage': opportunity.stage,
         'Priority': opportunity.priority,
@@ -549,7 +549,7 @@ export const Opportunities: React.FC = () => {
                                     {account?.name || 'Unknown Account'}
                                   </div>
                                   <div className="text-xs text-gray-500 truncate">
-                                    {account?.industry}
+                                    {account?.region}
                                   </div>
                                   {opportunity.productId && getProductName(opportunity.productId) && (
                                     <div className="flex items-center gap-1 mt-1">
