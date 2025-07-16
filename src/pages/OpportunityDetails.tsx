@@ -52,6 +52,8 @@ import { getDocument, getDocuments, createDocument, updateDocument, deleteDocume
 import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
+import { ActivityManager } from '../components/ActivityManager';
+import { useActivityManager } from '../hooks/useActivityManager';
 
 const OPPORTUNITY_STAGES: OpportunityStage[] = ['Discovery', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
 const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
@@ -271,15 +273,18 @@ export const OpportunityDetails: React.FC = () => {
     await autoSaveActivities(updatedActivities);
   };
 
-  const handleCompleteActivity = async (activityId: string) => {
-    const now = Timestamp.now();
-    const updatedActivities = formData.activities.map(a =>
-      a.id === activityId
-        ? { ...a, status: 'Completed' as ActivityStatus, completedAt: now, updatedAt: now, updatedBy: currentUser?.uid || 'system' }
-        : a
-    );
-    setFormData(prev => ({ ...prev, activities: updatedActivities }));
-    await autoSaveActivities(updatedActivities);
+  const handleCompleteActivity = (activityId: string) => {
+    const activity = formData.activities.find(a => a.id === activityId);
+    const account = accounts.find(a => a.id === formData.accountId);
+    
+    if (activity && account && opportunity) {
+      activityManager.openActivityCompletion(
+        activity,
+        opportunity.id,
+        opportunity.title,
+        account.name
+      );
+    }
   };
 
   const handleDeleteActivity = async (activityId: string) => {
@@ -376,6 +381,15 @@ export const OpportunityDetails: React.FC = () => {
       setDataLoading(false);
     }
   }, []);
+
+  // Unified activity management
+  const activityManager = useActivityManager({ 
+    opportunities: opportunity ? [opportunity] : [], 
+    onDataRefresh: async () => {
+      await fetchOpportunityData();
+      await fetchRelatedData();
+    }
+  });
 
   useEffect(() => {
     fetchOpportunityData();
@@ -1716,6 +1730,19 @@ export const OpportunityDetails: React.FC = () => {
           <Save className="h-5 w-5" />
         )}
       </button>
+      
+      {/* Unified Activity Completion Modal */}
+      {activityManager.activeActivity && activityManager.activityContext && (
+        <ActivityManager
+          activity={activityManager.activeActivity}
+          opportunityId={activityManager.activityContext.opportunityId}
+          opportunityTitle={activityManager.activityContext.opportunityTitle}
+          accountName={activityManager.activityContext.accountName}
+          onComplete={activityManager.completeActivity}
+          onCancel={activityManager.closeActivityCompletion}
+          isOpen={activityManager.isModalOpen}
+        />
+      )}
     </div>
   );
 }; 

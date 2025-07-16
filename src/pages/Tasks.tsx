@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import type { Task, TaskStatus, Opportunity, Activity, ActivityStatus, Account, Contact, ChecklistItem } from '../types';
+import type { Task, TaskStatus, Opportunity, Activity, ActivityStatus, Account, Contact, ChecklistItem, User } from '../types';
 import { ListView } from '../components/ListView';
 import { TaskBoard } from '../components/TaskBoard';
+import { ActivityManager } from '../components/ActivityManager';
 import { getDocuments, updateDocument } from '../lib/firestore';
+import { useActivityManager } from '../hooks/useActivityManager';
+import { getAllUsers, getUserDisplayNameById } from '../lib/userUtils';
 import { format, addDays, startOfDay, isToday, isTomorrow, isThisWeek, isPast, isSameDay } from 'date-fns';
 import { 
   LayoutGrid, 
@@ -16,9 +19,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   Plus,
-  Edit3,
-  Save,
-  X,
   CheckSquare
 } from 'lucide-react';
 
@@ -61,40 +61,34 @@ export const Tasks: React.FC = () => {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [opportunitiesWithTodos, setOpportunitiesWithTodos] = useState<OpportunityWithTodos[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'board' | 'scheduled'>('scheduled');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   
-  // Notes editing state
-  const [editingNotes, setEditingNotes] = useState<{ [key: string]: boolean }>({});
-  const [notesText, setNotesText] = useState<{ [key: string]: string }>({});
-  const [savingNotes, setSavingNotes] = useState<{ [key: string]: boolean }>({});
-
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [opportunitiesData, accountsData, contactsData] = await Promise.all([
+      const [opportunitiesData, accountsData, contactsData, usersData] = await Promise.all([
         getDocuments('opportunities'),
         getDocuments('accounts'),
-        getDocuments('contacts')
+        getDocuments('contacts'),
+        getAllUsers()
       ]);
       
       const opps = opportunitiesData as Opportunity[];
       const accs = accountsData as Account[];
       const cons = contactsData as Contact[];
+      const usrs = usersData as User[];
       
       setOpportunities(opps);
       setAccounts(accs);
       setContacts(cons);
+      setUsers(usrs);
       
       // Extract activities from all opportunities and convert to enhanced tasks
       const allActivities: EnhancedTask[] = [];
-      const initialNotesText: { [key: string]: string } = {};
       
       opps.forEach(opportunity => {
         const account = accs.find(a => a.id === opportunity.accountId);
@@ -115,7 +109,7 @@ export const Tasks: React.FC = () => {
             opportunityId: opportunity.id,
             opportunityTitle: opportunity.title,
             accountName: account?.name || 'Unknown Account',
-            assignedTo: activity.assignedTo,
+            assignedTo: getUserDisplayNameById(activity.assignedTo, usrs),
             dueDate: activity.dateTime,
             status: activity.status, // Use actual activity status
             activityType: activity.activityType,
@@ -127,12 +121,10 @@ export const Tasks: React.FC = () => {
           };
           
           allActivities.push(enhancedTask);
-          initialNotesText[taskId] = activity.notes || '';
         });
       });
       
       setActivities(allActivities);
-      setNotesText(initialNotesText);
 
       // Process opportunities with uncompleted todos
       const oppsWithTodos: OpportunityWithTodos[] = opps
@@ -156,7 +148,17 @@ export const Tasks: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Unified activity management
+  const activityManager = useActivityManager({ 
+    opportunities, 
+    onDataRefresh: fetchData 
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleToggleTodoItem = async (opportunityId: string, itemId: string) => {
     try {
@@ -191,116 +193,23 @@ export const Tasks: React.FC = () => {
     window.location.href = `/opportunities/${task.opportunityId}`;
   };
 
-  const handleCompleteActivity = async (taskId: string) => {
-    try {
-      // Parse the taskId to get opportunityId and activityId
-      const [opportunityId, activityId] = taskId.split('_');
-      
-      if (!opportunityId || !activityId) {
-        console.error('Invalid task ID format:', taskId);
-        return;
-      }
-      
-      const opportunity = opportunities.find(o => o.id === opportunityId);
-      if (!opportunity) {
-        console.error('Opportunity not found:', opportunityId);
-        return;
-      }
-      
-      // Update the activity status to Completed, keeping any updated notes
-      const currentNotes = notesText[taskId] || '';
-      const updatedActivities = opportunity.activities.map(activity => 
-        activity.id === activityId 
-          ? { 
-              ...activity, 
-              status: 'Completed' as ActivityStatus,
-              notes: currentNotes, // Save current notes when completing
-              completedAt: new Date(),
-              updatedAt: new Date(),
-              updatedBy: 'current-user'
-            }
-          : activity
+  const handleCompleteActivity = (taskId: string) => {
+    const [opportunityId, activityId] = taskId.split('_');
+    const opportunity = opportunities.find(o => o.id === opportunityId);
+    const account = accounts.find(a => a.id === opportunity?.accountId);
+    const activity = opportunity?.activities.find(a => a.id === activityId);
+
+    if (opportunity && account && activity) {
+      activityManager.openActivityCompletion(
+        activity,
+        opportunity.id,
+        opportunity.title,
+        account.name
       );
-      
-      // Update the opportunity with the modified activities
-      await updateDocument('opportunities', opportunityId, {
-        activities: updatedActivities,
-        updatedAt: new Date()
-      });
-      
-      // Refresh the data
-      await fetchData();
-    } catch (error) {
-      console.error('Error completing activity:', error);
     }
   };
 
-  const handleSaveNotes = async (taskId: string) => {
-    try {
-      setSavingNotes(prev => ({ ...prev, [taskId]: true }));
-      
-      // Parse the taskId to get opportunityId and activityId
-      const [opportunityId, activityId] = taskId.split('_');
-      
-      if (!opportunityId || !activityId) {
-        console.error('Invalid task ID format:', taskId);
-        return;
-      }
-      
-      const opportunity = opportunities.find(o => o.id === opportunityId);
-      if (!opportunity) {
-        console.error('Opportunity not found:', opportunityId);
-        return;
-      }
-      
-      // Update the activity notes
-      const updatedNotes = notesText[taskId] || '';
-      const updatedActivities = opportunity.activities.map(activity => 
-        activity.id === activityId 
-          ? { 
-              ...activity, 
-              notes: updatedNotes,
-              updatedAt: new Date(),
-              updatedBy: 'current-user'
-            }
-          : activity
-      );
-      
-      // Update the opportunity with the modified activities
-      await updateDocument('opportunities', opportunityId, {
-        activities: updatedActivities,
-        updatedAt: new Date()
-      });
-      
-      // Update local state and exit edit mode
-      setActivities(prev => prev.map(task => 
-        task.id === taskId ? { ...task, notes: updatedNotes } : task
-      ));
-      setEditingNotes(prev => ({ ...prev, [taskId]: false }));
-      
-    } catch (error) {
-      console.error('Error saving notes:', error);
-    } finally {
-      setSavingNotes(prev => ({ ...prev, [taskId]: false }));
-    }
-  };
 
-  const handleEditNotes = (taskId: string) => {
-    setEditingNotes(prev => ({ ...prev, [taskId]: true }));
-  };
-
-  const handleCancelEditNotes = (taskId: string) => {
-    // Reset notes text to original value
-    const task = activities.find(t => t.id === taskId);
-    if (task) {
-      setNotesText(prev => ({ ...prev, [taskId]: task.notes }));
-    }
-    setEditingNotes(prev => ({ ...prev, [taskId]: false }));
-  };
-
-  const handleNotesChange = (taskId: string, value: string) => {
-    setNotesText(prev => ({ ...prev, [taskId]: value }));
-  };
 
   // Calculate task statistics
   const calculateStats = (): TaskStats => {
@@ -773,67 +682,12 @@ export const Tasks: React.FC = () => {
                                   <h5 className="text-sm font-medium text-gray-700 flex items-center gap-1">
                                     📝 Notes
                                   </h5>
-                                  {!editingNotes[task.id] && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleEditNotes(task.id);
-                                      }}
-                                      className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                                    >
-                                      <Edit3 className="h-3 w-3" />
-                                      Edit
-                                    </button>
+                                </div>
+                                <div className="text-sm text-gray-600 min-h-[2rem]">
+                                  {task.notes || (
+                                    <span className="text-gray-400 italic">No notes added yet</span>
                                   )}
                                 </div>
-
-                                {editingNotes[task.id] ? (
-                                  <div className="space-y-2">
-                                    <textarea
-                                      value={notesText[task.id] || ''}
-                                      onChange={(e) => handleNotesChange(task.id, e.target.value)}
-                                      placeholder="Add notes or comments about this activity..."
-                                      className="w-full p-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-iol-red focus:border-transparent resize-none"
-                                      rows={3}
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <div className="flex items-center gap-2">
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleSaveNotes(task.id);
-                                        }}
-                                        disabled={savingNotes[task.id]}
-                                        className="text-sm bg-iol-red hover:bg-iol-red-dark text-white px-3 py-1 rounded transition-colors flex items-center gap-1 disabled:opacity-50"
-                                      >
-                                        <Save className="h-3 w-3" />
-                                        {savingNotes[task.id] ? 'Saving...' : 'Save'}
-                                      </button>
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleCancelEditNotes(task.id);
-                                        }}
-                                        className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded transition-colors flex items-center gap-1"
-                                      >
-                                        <X className="h-3 w-3" />
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div 
-                                    className="text-sm text-gray-600 min-h-[2rem] cursor-text"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEditNotes(task.id);
-                                    }}
-                                  >
-                                    {task.notes || (
-                                      <span className="text-gray-400 italic">Click to add notes...</span>
-                                    )}
-                                  </div>
-                                )}
                               </div>
                             </div>
                           ))}
@@ -982,6 +836,19 @@ export const Tasks: React.FC = () => {
           </div>
         </div>
       </div>
+      
+      {/* Unified Activity Completion Modal */}
+      {activityManager.activeActivity && activityManager.activityContext && (
+        <ActivityManager
+          activity={activityManager.activeActivity}
+          opportunityId={activityManager.activityContext.opportunityId}
+          opportunityTitle={activityManager.activityContext.opportunityTitle}
+          accountName={activityManager.activityContext.accountName}
+          onComplete={activityManager.completeActivity}
+          onCancel={activityManager.closeActivityCompletion}
+          isOpen={activityManager.isModalOpen}
+        />
+      )}
     </div>
   );
 }; 
