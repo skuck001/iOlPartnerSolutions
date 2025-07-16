@@ -9,6 +9,8 @@ import {
   deleteDoc,
   query,
   where,
+  orderBy,
+  limit,
   Timestamp,
   QueryConstraint
 } from 'firebase/firestore';
@@ -215,5 +217,91 @@ export const updateContactsLastActivity = async (contactIds: string[], activityD
     } catch (error) {
       console.error(`Error updating lastContactDate for contact ${contactId}:`, error);
     }
+  }
+};
+
+// Quick Access function to get recently updated items across all collections
+export interface RecentlyUpdatedItem {
+  id: string;
+  title: string;
+  type: 'account' | 'contact' | 'opportunity' | 'product';
+  updatedAt: Timestamp;
+  subtitle?: string;
+  href: string;
+}
+
+export const getRecentlyUpdatedItems = async (limitCount: number = 5): Promise<RecentlyUpdatedItem[]> => {
+  try {
+    const collections = [
+      { name: 'accounts', type: 'account' as const },
+      { name: 'contacts', type: 'contact' as const },
+      { name: 'opportunities', type: 'opportunity' as const },
+      { name: 'products', type: 'product' as const },
+    ];
+
+    const allItems: RecentlyUpdatedItem[] = [];
+
+    // Query each collection for recently updated items
+    for (const { name, type } of collections) {
+      try {
+        const items = await getDocuments(name, [
+          orderBy('updatedAt', 'desc'),
+          limit(limitCount)
+        ]);
+
+        // Transform items to RecentlyUpdatedItem format
+        const transformedItems: RecentlyUpdatedItem[] = items
+          .filter((item: any) => item.updatedAt) // Only include items with updatedAt
+          .map((item: any) => {
+            let title = '';
+            let subtitle = '';
+            let href = '';
+
+            switch (type) {
+              case 'account':
+                title = item.name;
+                subtitle = item.industry || '';
+                href = `/accounts/${item.id}`;
+                break;
+              case 'contact':
+                title = item.name;
+                subtitle = item.position || item.email || '';
+                href = `/contacts/${item.id}`;
+                break;
+              case 'opportunity':
+                title = item.title;
+                subtitle = item.stage || '';
+                href = `/opportunities/${item.id}`;
+                break;
+              case 'product':
+                title = item.name;
+                subtitle = item.category || '';
+                href = `/products/${item.id}`;
+                break;
+            }
+
+            return {
+              id: item.id,
+              title,
+              type,
+              updatedAt: item.updatedAt,
+              subtitle,
+              href,
+            };
+          });
+
+        allItems.push(...transformedItems);
+      } catch (error) {
+        console.error(`Error fetching recently updated ${name}:`, error);
+      }
+    }
+
+    // Sort all items by updatedAt and return top limitCount
+    return allItems
+      .sort((a, b) => b.updatedAt.toMillis() - a.updatedAt.toMillis())
+      .slice(0, limitCount);
+  } catch (error) {
+    console.error('Error getting recently updated items:', error);
+    return [];
   }
 }; 

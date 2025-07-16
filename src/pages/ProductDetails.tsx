@@ -165,7 +165,7 @@ export const ProductDetails: React.FC = () => {
         Object.entries(formData).filter(([_, value]) => value !== undefined && value !== '')
       );
 
-      const submitData = {
+      const submitData: any = {
         ...cleanData,
         createdAt: isNew ? Timestamp.now() : product?.createdAt,
         updatedAt: Timestamp.now()
@@ -288,7 +288,7 @@ export const ProductDetails: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="min-h-screen flex flex-col relative">
       {/* Compact Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-3">
         <div className="flex items-center justify-between">
@@ -464,26 +464,7 @@ export const ProductDetails: React.FC = () => {
                     <h2 className="text-base font-medium text-gray-900">Connectivity & Integrations</h2>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Integrations</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formData.numberOfIntegrations}
-                        onChange={(e) => setFormData({ ...formData, numberOfIntegrations: parseInt(e.target.value) || 0 })}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Hotels Connected</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={formData.numberOfHotelsConnected}
-                        onChange={(e) => setFormData({ ...formData, numberOfHotelsConnected: parseInt(e.target.value) || 0 })}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      />
-                    </div>
+
                   </div>
                 </div>
 

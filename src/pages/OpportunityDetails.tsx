@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -91,8 +91,8 @@ export const OpportunityDetails: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  // Note: Tasks are now managed as activities within opportunities
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -181,6 +181,113 @@ export const OpportunityDetails: React.FC = () => {
     return colors[priority];
   };
 
+  const handleEditActivity = (activity: ActivityType) => {
+    setActivityForm({
+      activityType: activity.activityType,
+      dateTime: activity.dateTime instanceof Timestamp ? activity.dateTime.toDate() : activity.dateTime,
+      relatedContactIds: activity.relatedContactIds || [],
+      method: activity.method,
+      subject: activity.subject,
+      notes: activity.notes || '',
+      assignedTo: activity.assignedTo || 'current-user',
+      status: activity.status,
+      priority: activity.priority || 'Medium',
+    });
+    setEditingActivityId(activity.id);
+    setShowActivityForm(true);
+  };
+
+  const autoSaveActivities = async (activities: ActivityType[]) => {
+    if (!isNew && id) {
+      // Remove undefined/null activities and undefined properties
+      const sanitized = activities
+        .filter(a => !!a && typeof a === 'object')
+        .map(a => {
+          const clean: any = {};
+          Object.entries(a).forEach(([k, v]) => {
+            if (v !== undefined) clean[k] = v;
+          });
+          return clean;
+        });
+      await updateDocument('opportunities', id, { activities: sanitized });
+      // Don't fetch back from Firestore - trust the local state which is already updated
+    }
+  };
+
+  const handleSaveActivity = async () => {
+    if (!activityForm.subject.trim()) {
+      alert('Subject is required');
+      return;
+    }
+    const now = Timestamp.now();
+    const userId = currentUser?.uid || 'system';
+    const activityId = editingActivityId || Math.random().toString(36).substr(2, 9);
+    const newActivity: ActivityType = {
+      // First, preserve existing data for optional fields like completedAt, followUpDate, etc.
+      ...(editingActivityId ? formData.activities.find(a => a.id === editingActivityId) : {}),
+      // Then override with the new form data
+      id: activityId,
+      activityType: activityForm.activityType,
+      dateTime: Timestamp.fromDate(
+        activityForm.dateTime instanceof Date ? activityForm.dateTime : new Date(activityForm.dateTime)
+      ),
+      relatedContactIds: activityForm.relatedContactIds || [],
+      method: activityForm.method,
+      subject: activityForm.subject,
+      notes: activityForm.notes || '',
+      assignedTo: activityForm.assignedTo || userId,
+      attachments: [],
+      followUpNeeded: false,
+      status: activityForm.status,
+      createdAt: editingActivityId
+        ? (formData.activities.find(a => a.id === editingActivityId)?.createdAt || now)
+        : now,
+      createdBy: editingActivityId
+        ? (formData.activities.find(a => a.id === editingActivityId)?.createdBy || userId)
+        : userId,
+      updatedAt: now,
+      updatedBy: userId,
+      priority: activityForm.priority || 'Medium',
+    };
+    
+    const updatedActivities = editingActivityId
+      ? formData.activities.map(a => a.id === editingActivityId ? newActivity : a)
+      : [...formData.activities, newActivity];
+    
+    setFormData(prev => ({ ...prev, activities: updatedActivities }));
+    setEditingActivityId(null);
+    setShowActivityForm(false);
+    setActivityForm({
+      activityType: 'Meeting',
+      dateTime: new Date(),
+      relatedContactIds: [],
+      method: 'In-person',
+      subject: '',
+      notes: '',
+      assignedTo: userId,
+      status: 'Scheduled',
+      priority: 'Medium',
+    });
+    await autoSaveActivities(updatedActivities);
+  };
+
+  const handleCompleteActivity = async (activityId: string) => {
+    const now = Timestamp.now();
+    const updatedActivities = formData.activities.map(a =>
+      a.id === activityId
+        ? { ...a, status: 'Completed' as ActivityStatus, completedAt: now, updatedAt: now, updatedBy: currentUser?.uid || 'system' }
+        : a
+    );
+    setFormData(prev => ({ ...prev, activities: updatedActivities }));
+    await autoSaveActivities(updatedActivities);
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    const updatedActivities = formData.activities.filter(a => a.id !== activityId);
+    setFormData(prev => ({ ...prev, activities: updatedActivities }));
+    await autoSaveActivities(updatedActivities);
+  };
+
   useEffect(() => {
     // Set default owner for new opportunities
     if (isNew && currentUser?.uid && !formData.ownerId) {
@@ -188,23 +295,31 @@ export const OpportunityDetails: React.FC = () => {
     }
   }, [isNew, currentUser?.uid, formData.ownerId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
+  // Memoized filtered data to prevent unnecessary re-renders
+  const { availableContacts, assignedContacts, suggestedContacts } = useMemo(() => {
+    const available = contacts.filter(c => 
+      !formData.accountId || c.accountId === formData.accountId
+    );
+    const assigned = contacts.filter(c => formData.contactIds.includes(c.id || ''));
+    const suggested = available.filter(c => 
+      !formData.contactIds.includes(c.id || '')
+    );
+    return { availableContacts: available, assignedContacts: assigned, suggestedContacts: suggested };
+  }, [contacts, formData.accountId, formData.contactIds]);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const account = useMemo(() => accounts.find(a => a.id === formData.accountId), [accounts, formData.accountId]);
+  const product = useMemo(() => products.find(p => p.id === formData.productId), [products, formData.productId]);
+
+  // Optimized data fetching - fetch opportunity first, then related data
+  const fetchOpportunityData = useCallback(async () => {
+    if (isNew) {
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const [accountsData, contactsData, productsData] = await Promise.all([
-        getDocuments('accounts'),
-        getDocuments('contacts'),
-        getDocuments('products')
-      ]);
-      setAccounts(accountsData as Account[]);
-      setContacts(contactsData as Contact[]);
-      setProducts(productsData as Product[]);
-
-      if (!isNew && id && id !== 'new') {
+      // Fetch opportunity first for immediate content
+      if (id && id !== 'new') {
         const opportunityData = await getDocument('opportunities', id);
         if (opportunityData) {
           const opportunityTyped = opportunityData as Opportunity;
@@ -231,28 +346,44 @@ export const OpportunityDetails: React.FC = () => {
           });
         }
       }
+      setLoading(false);
     } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
+      console.error('Error fetching opportunity:', error);
       setLoading(false);
     }
-  };
+  }, [id, isNew, currentUser?.uid]);
 
-  const account = accounts.find(a => a.id === formData.accountId);
-  const product = products.find(p => p.id === formData.productId);
+  // Fetch related data progressively
+  const fetchRelatedData = useCallback(async () => {
+    try {
+      // Fetch only essential data first
+      const [accountsData] = await Promise.all([
+        getDocuments('accounts') // Still need all accounts for dropdown
+      ]);
+      setAccounts(accountsData as Account[]);
 
-  // Filter contacts for the selected account
-  const availableContacts = contacts.filter(c => 
-    !formData.accountId || c.accountId === formData.accountId
-  );
+      // Then fetch contacts and products
+      const [contactsData, productsData] = await Promise.all([
+        getDocuments('contacts'),
+        getDocuments('products')
+      ]);
+      setContacts(contactsData as Contact[]);
+      setProducts(productsData as Product[]);
+      
+      setDataLoading(false);
+    } catch (error) {
+      console.error('Error fetching related data:', error);
+      setDataLoading(false);
+    }
+  }, []);
 
-  // Get assigned contacts
-  const assignedContacts = contacts.filter(c => formData.contactIds.includes(c.id || ''));
+  useEffect(() => {
+    fetchOpportunityData();
+  }, [fetchOpportunityData]);
 
-  // Get suggested contacts (from the same account but not assigned)
-  const suggestedContacts = availableContacts.filter(c => 
-    !formData.contactIds.includes(c.id || '')
-  );
+  useEffect(() => {
+    fetchRelatedData();
+  }, [fetchRelatedData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -285,7 +416,8 @@ export const OpportunityDetails: React.FC = () => {
         navigate('/opportunities');
       } else {
         await updateDocument('opportunities', id, submitData);
-        await fetchData();
+        await fetchOpportunityData();
+        await fetchRelatedData();
       }
     } catch (error) {
       console.error('Error saving opportunity:', error);
@@ -329,7 +461,7 @@ export const OpportunityDetails: React.FC = () => {
         const docRef = await createDocument('contacts', contactData);
         
         // Refresh contacts and add to opportunity
-        await fetchData();
+        await fetchRelatedData();
         handleContactToggle(docRef.id);
         
         // Reset form
@@ -371,8 +503,9 @@ export const OpportunityDetails: React.FC = () => {
       const newItem = {
         id: Date.now().toString(),
         title: newChecklistItem.trim(),
+        text: newChecklistItem.trim(),
         completed: false,
-        createdAt: new Date()
+        createdAt: Timestamp.now(),
       };
       setFormData({
         ...formData,
@@ -400,10 +533,51 @@ export const OpportunityDetails: React.FC = () => {
 
   // ... Rest of existing functions for activities and checklist
 
+  // Early return with skeleton UI for better LCP
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="h-full overflow-auto bg-gray-50">
+        <div className="p-6">
+          {/* Header Skeleton */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-8 h-8 bg-gray-200 rounded animate-pulse"></div>
+              <div className="w-48 h-8 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+            <div className="w-24 h-10 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+
+          {/* Content Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Content Skeleton */}
+            <div className="lg:col-span-2 space-y-6">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="space-y-4">
+                  <div className="w-full h-6 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="w-3/4 h-6 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="w-1/2 h-6 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </div>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="space-y-4">
+                  <div className="w-full h-6 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="w-full h-32 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar Skeleton */}
+            <div className="space-y-6">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="space-y-4">
+                  <div className="w-32 h-6 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="w-full h-8 bg-gray-200 rounded animate-pulse"></div>
+                  <div className="w-3/4 h-6 bg-gray-200 rounded animate-pulse"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -588,7 +762,10 @@ export const OpportunityDetails: React.FC = () => {
                       {editingActivityId && (
                         <button
                           type="button"
-                          onClick={resetActivityForm}
+                          onClick={() => {
+                            setShowActivityForm(false);
+                            setEditingActivityId(null);
+                          }}
                           className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
                         >
                           Cancel Edit
@@ -600,7 +777,7 @@ export const OpportunityDetails: React.FC = () => {
                           if (!showActivityForm) {
                             setShowActivityForm(true);
                           } else {
-                            resetActivityForm();
+                            handleSaveActivity();
                           }
                         }}
                         className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-iol-red hover:bg-iol-red-dark rounded-lg transition-colors shadow-sm"
@@ -752,7 +929,10 @@ export const OpportunityDetails: React.FC = () => {
                           {editingActivityId && (
                             <button
                               type="button"
-                              onClick={resetActivityForm}
+                              onClick={() => {
+                                setShowActivityForm(false);
+                                setEditingActivityId(null);
+                              }}
                               className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200"
                             >
                               Cancel

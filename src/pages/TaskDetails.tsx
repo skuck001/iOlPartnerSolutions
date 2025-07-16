@@ -157,7 +157,7 @@ export const TaskDetails: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="min-h-screen flex flex-col relative">
       {/* Compact Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-3">
         <div className="flex items-center justify-between">

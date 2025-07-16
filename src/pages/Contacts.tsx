@@ -325,7 +325,7 @@ export const Contacts: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-6">
         <div className="flex items-center justify-between mb-6">

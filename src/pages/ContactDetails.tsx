@@ -38,7 +38,7 @@ const contactTypes: ContactType[] = [
   'Other'
 ];
 
-const CONTACT_METHODS = ['Email', 'Phone', 'LinkedIn', 'Teams'];
+const CONTACT_METHODS = ['Email', 'Phone', 'LinkedIn', 'Teams'] as const;
 
 export const ContactDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -192,7 +192,7 @@ export const ContactDetails: React.FC = () => {
         Object.entries(formData).filter(([_, value]) => value !== undefined && value !== '')
       );
 
-      const submitData = {
+      const submitData: any = {
         ...cleanData,
         createdAt: isNew ? Timestamp.now() : contact?.createdAt,
         updatedAt: Timestamp.now()
@@ -256,7 +256,7 @@ export const ContactDetails: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col relative">
+    <div className="min-h-screen flex flex-col relative">
       {/* Compact Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-3">
         <div className="flex items-center justify-between">
@@ -441,7 +441,7 @@ export const ContactDetails: React.FC = () => {
                       <label className="block text-xs font-medium text-gray-700 mb-1">Preferred Contact</label>
                       <select
                         value={formData.preferredContactMethod}
-                        onChange={(e) => setFormData({ ...formData, preferredContactMethod: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, preferredContactMethod: e.target.value as typeof CONTACT_METHODS[number] })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       >
                         {CONTACT_METHODS.map((method) => (

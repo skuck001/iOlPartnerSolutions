@@ -18,6 +18,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { User } from '../types';
+import { QuickAccess } from './QuickAccess';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -93,10 +94,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <div className="flex-shrink-0 w-64 bg-black text-white border-r border-gray-800">
-        <div className="flex flex-col h-full text-white">
+      <div className="flex-shrink-0 w-64 bg-black text-white border-r border-gray-800 h-screen sticky top-0">
+        <div className="flex flex-col h-full text-white bg-black">
           {/* Logo/Header */}
           <div className="flex items-center gap-3 p-6 border-b border-gray-800">
             <div className="w-10 h-10 flex items-center justify-center">
@@ -167,7 +168,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 py-6">
+          <nav className="flex-1 py-6 bg-transparent overflow-y-auto scrollbar-hide">
             <div className="px-3 space-y-1">
               {navigationItems.map((item) => (
                 <NavLink
@@ -213,26 +214,23 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <BarChart3 className="h-5 w-5 mr-3" />
                   Opportunity Rundown
                 </NavLink>
-                <a href="#" className="sidebar-item sidebar-item-inactive-iol">
-                  <TrendingUp className="h-5 w-5 mr-3" />
-                  Roadmap
-                </a>
-                <a href="#" className="sidebar-item sidebar-item-inactive-iol">
-                  <Target className="h-5 w-5 mr-3" />
-                  Goals
-                </a>
-                <a href="#" className="sidebar-item sidebar-item-inactive-iol">
-                  <CheckSquare className="h-5 w-5 mr-3" />
-                  Approvals
-                </a>
+
               </div>
+            </div>
+
+            {/* Quick Access Section */}
+            <div className="mt-8 px-3 bg-transparent">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                Quick Access
+              </h3>
+              <QuickAccess />
             </div>
           </nav>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+      <div className="flex-1 bg-gray-50">
         {children}
       </div>
     </div>

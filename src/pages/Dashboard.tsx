@@ -145,7 +145,7 @@ export const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="h-full overflow-auto bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       <div className="p-6">
         {/* Header */}
         <div className="mb-8">
@@ -232,31 +232,34 @@ export const Dashboard: React.FC = () => {
         {/* Pipeline Chart and Action Items */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Sales Pipeline Bar Chart */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Sales Pipeline</h3>
-            <div className="space-y-6">
-              {pipelineData.map((stage) => (
-                <div key={stage.stage} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-gray-700">{stage.stage}</span>
-                    <div className="text-right">
-                      <div className="font-semibold text-gray-900">${stage.value.toLocaleString()}</div>
-                      <div className="text-sm text-gray-500">({stage.count} opportunities)</div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Sales Pipeline</h3>
+            <div className="space-y-2">
+              {(() => {
+                const maxCount = Math.max(...pipelineData.map(stage => stage.count));
+                return pipelineData.map((stage) => {
+                  // Calculate bar width based on count, always show at least 8% for visibility
+                  const percent = maxCount > 0 ? (stage.count / maxCount) * 100 : 0;
+                  const barWidth = percent > 0 ? percent : (stage.count > 0 ? 8 : 4); // 8% for nonzero, 4% for zero
+                  const percentOfTotal = (totalPipelineValue + totalClosedWonValue) > 0 ? ((stage.value / (totalPipelineValue + totalClosedWonValue)) * 100).toFixed(1) : '0';
+                  return (
+                    <div key={stage.stage} className="flex items-center gap-2 text-xs">
+                      <span className="font-medium text-gray-700 w-20 truncate">{stage.stage}</span>
+                      <div className="flex-1 flex flex-col justify-center">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${stage.bgColor} transition-all duration-500 ease-out`}
+                            style={{ width: `${barWidth}%`, minWidth: '12px' }}
+                          ></div>
+                        </div>
+                      </div>
+                      <span className="text-gray-900 font-semibold tabular-nums ml-2">${stage.value.toLocaleString()}</span>
+                      <span className="text-gray-500 ml-1">({stage.count})</span>
+                      <span className="text-gray-400 ml-1">{percentOfTotal}%</span>
                     </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-4">
-                    <div 
-                      className={`h-4 rounded-full ${stage.bgColor} transition-all duration-500 ease-out`}
-                      style={{ 
-                        width: maxPipelineValue > 0 ? `${(stage.value / maxPipelineValue) * 100}%` : '0%' 
-                      }}
-                    ></div>
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {maxPipelineValue > 0 ? ((stage.value / (totalPipelineValue + totalClosedWonValue)) * 100).toFixed(1) : 0}% of total pipeline
-                  </div>
-                </div>
-              ))}
+                  );
+                });
+              })()}
             </div>
           </div>
 
