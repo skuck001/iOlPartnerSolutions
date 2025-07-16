@@ -36,8 +36,7 @@ import type {
   ChecklistItem,
   Account, 
   Contact, 
-  Product,
-  Task
+  Product
 } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument } from '../lib/firestore';
 import { format } from 'date-fns';
@@ -88,7 +87,7 @@ export const OpportunityDetails: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // Note: Tasks are now managed as activities within opportunities
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -148,17 +147,18 @@ export const OpportunityDetails: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [accountsData, contactsData, productsData, tasksData] = await Promise.all([
+      const [accountsData, contactsData, productsData] = await Promise.all([
         getDocuments('accounts'),
         getDocuments('contacts'),
-        getDocuments('products'),
-        getDocuments('tasks')
+        getDocuments('products')
+        // Note: Removed tasks fetch as activities are now managed within opportunities
+        // and displayed in the separate Tasks module
       ]);
       
       setAccounts(accountsData as Account[]);
       setContacts(contactsData as Contact[]);
       setProducts(productsData as Product[]);
-      setTasks((tasksData as Task[]).filter(t => t.opportunityId === id));
+      // setTasks is no longer needed here
 
       if (!isNew && id) {
         const opportunityData = await getDocument('opportunities', id);
@@ -458,7 +458,7 @@ export const OpportunityDetails: React.FC = () => {
         contactsInvolved: updatedFormData.contactIds, // For backward compatibility
         meetingHistory: [], // For backward compatibility
         useCase: '', // For backward compatibility - keep empty since replaced by iolProducts
-        tasks: tasks.map(t => t.id),
+        tasks: [], // Tasks are now managed as activities within opportunities
         createdAt: opportunity?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),
         lastActivityDate: getLastActivityDate()
@@ -554,7 +554,7 @@ export const OpportunityDetails: React.FC = () => {
         contactsInvolved: updatedFormData.contactIds,
         meetingHistory: [],
         useCase: '',
-        tasks: tasks.map(t => t.id),
+        tasks: [], // Tasks are now managed as activities within opportunities
         createdAt: opportunity?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),
         lastActivityDate: getLastActivityDate()
@@ -640,7 +640,7 @@ export const OpportunityDetails: React.FC = () => {
         contactsInvolved: updatedFormData.contactIds,
         meetingHistory: [],
         useCase: '',
-        tasks: tasks.map(t => t.id),
+        tasks: [], // Tasks are now managed as activities within opportunities
         createdAt: opportunity?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),
         lastActivityDate: getLastActivityDate()
@@ -715,7 +715,7 @@ export const OpportunityDetails: React.FC = () => {
         contactsInvolved: formData.contactIds, // For backward compatibility
         meetingHistory: [], // For backward compatibility
         useCase: '', // For backward compatibility - keep empty since replaced by iolProducts
-        tasks: tasks.map(t => t.id),
+        tasks: [], // Tasks are now managed as activities within opportunities
         createdAt: isNew ? Timestamp.now() : opportunity?.createdAt || Timestamp.now(),
         updatedAt: Timestamp.now(),
         lastActivityDate: getLastActivityDate()

@@ -1,53 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
-  Package, 
   Search, 
   Filter, 
   Plus, 
-  Building2, 
+  Eye, 
+  Edit3, 
+  Calendar, 
   Users, 
+  Activity, 
+  TrendingUp,
+  Building2,
+  MapPin,
+  ArrowUpDown,
+  AlertTriangle,
+  Clock,
+  CheckCircle,
+  DollarSign,
+  Package,
+  Download,
   ExternalLink,
+  Globe,
   Tag,
-  ChevronDown
+  Star,
+  Code,
+  Layers
 } from 'lucide-react';
-import { Timestamp } from 'firebase/firestore';
-import type { Product, Account, Contact, ProductCategory, ProductSubcategory } from '../types';
+import * as XLSX from 'xlsx';
+import type { Product, ProductCategory, ProductSubcategory, Account, Contact, Opportunity } from '../types';
 import { getDocuments } from '../lib/firestore';
+import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
-
+type SortField = 'name' | 'category' | 'subcategory' | 'status' | 'version' | 'createdAt';
+type SortDirection = 'asc' | 'desc';
 
 export const Products: React.FC = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  
-  // Filters
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All');
-  const [selectedStatus, setSelectedStatus] = useState<string>('All');
-  const [selectedAccount, setSelectedAccount] = useState<string>('All');
-  
-  // Sorting
-  const [sortBy, setSortBy] = useState<'name' | 'category' | 'status' | 'createdAt'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [categoryFilter, setCategoryFilter] = useState<ProductCategory | 'All'>('All');
+  const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [accountFilter, setAccountFilter] = useState<string>('All');
 
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    setLoading(true);
     try {
-      const [productsData, accountsData, contactsData] = await Promise.all([
+      const [productsData, accountsData, contactsData, opportunitiesData] = await Promise.all([
         getDocuments('products'),
         getDocuments('accounts'),
-        getDocuments('contacts')
+        getDocuments('contacts'),
+        getDocuments('opportunities')
       ]);
       setProducts(productsData as Product[]);
       setAccounts(accountsData as Account[]);
       setContacts(contactsData as Contact[]);
+      setOpportunities(opportunitiesData as Opportunity[]);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -55,302 +71,663 @@ export const Products: React.FC = () => {
     }
   };
 
-  // Get unique values for filters
-  const categories = Array.from(new Set(products.map(p => p.category)));
-  const statuses = Array.from(new Set(products.map(p => p.status)));
-  const accountNames = accounts.map(a => ({ id: a.id, name: a.name }));
+  const getAccount = (accountId: string) => {
+    return accounts.find(a => a.id === accountId);
+  };
 
-  // Filter and sort products
-  const filteredProducts = products
+  const getContactsForProduct = (product: Product) => {
+    return contacts.filter(c => c.productIds?.includes(product.id) || false);
+  };
+
+  const getOpportunitiesForProduct = (product: Product) => {
+    return opportunities.filter(opp => opp.productId === product.id);
+  };
+
+  const getActiveOpportunitiesCount = (product: Product) => {
+    const productOpportunities = getOpportunitiesForProduct(product);
+    return productOpportunities.filter(opp => 
+      opp.stage !== 'Closed-Won' && opp.stage !== 'Closed-Lost'
+    ).length;
+  };
+
+  const getTotalDealValue = (product: Product) => {
+    const productOpportunities = getOpportunitiesForProduct(product);
+    return productOpportunities
+      .filter(opp => opp.stage !== 'Closed-Lost')
+      .reduce((total, opp) => total + (opp.estimatedDealValue || 0), 0);
+  };
+
+  const getWonDealValue = (product: Product) => {
+    const productOpportunities = getOpportunitiesForProduct(product);
+    return productOpportunities
+      .filter(opp => opp.stage === 'Closed-Won')
+      .reduce((total, opp) => total + (opp.estimatedDealValue || 0), 0);
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const handleRowClick = (product: Product) => {
+    navigate(`/products/${product.id}`);
+  };
+
+  const handleAdd = () => {
+    navigate('/products/new');
+  };
+
+  const getCategoryColor = (category: ProductCategory) => {
+    const colors = {
+      'Business Intelligence': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Revenue Management': 'bg-green-100 text-green-800 border-green-200',
+      'Distribution': 'bg-purple-100 text-purple-800 border-purple-200',
+      'Guest Experience': 'bg-pink-100 text-pink-800 border-pink-200',
+      'Operations': 'bg-orange-100 text-orange-800 border-orange-200',
+      'Connectivity': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Booking Engine': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'Channel Management': 'bg-teal-100 text-teal-800 border-teal-200',
+      'Other': 'bg-gray-100 text-gray-800 border-gray-200'
+    };
+    return colors[category];
+  };
+
+  const getStatusColor = (status: string) => {
+    const colors = {
+      'Active': 'bg-green-100 text-green-800 border-green-200',
+      'Deprecated': 'bg-red-100 text-red-800 border-red-200',
+      'Development': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Beta': 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    };
+    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800 border-gray-200';
+  };
+
+  const getCategoryIcon = (category: ProductCategory) => {
+    const icons = {
+      'Business Intelligence': '📊',
+      'Revenue Management': '💰',
+      'Distribution': '📈',
+      'Guest Experience': '🎯',
+      'Operations': '⚙️',
+      'Connectivity': '🔗',
+      'Booking Engine': '📅',
+      'Channel Management': '🌐',
+      'Other': '📦'
+    };
+    return icons[category] || '📦';
+  };
+
+  const filteredAndSortedProducts = products
     .filter(product => {
-      const matchesSearch = searchTerm === '' || 
+      const account = getAccount(product.accountId);
+      const matchesSearch = (
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
+        (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        product.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.subcategory.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (account?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.tags || []).some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
       
-      const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-      const matchesStatus = selectedStatus === 'All' || product.status === selectedStatus;
-      const matchesAccount = selectedAccount === 'All' || product.accountId === selectedAccount;
+      const matchesCategory = categoryFilter === 'All' || product.category === categoryFilter;
+      const matchesStatus = statusFilter === 'All' || product.status === statusFilter;
+      const matchesAccount = accountFilter === 'All' || product.accountId === accountFilter;
       
       return matchesSearch && matchesCategory && matchesStatus && matchesAccount;
     })
     .sort((a, b) => {
-      let comparison = 0;
+      let aValue: any, bValue: any;
       
-      switch (sortBy) {
+      switch (sortField) {
         case 'name':
-          comparison = a.name.localeCompare(b.name);
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
           break;
         case 'category':
-          comparison = a.category.localeCompare(b.category);
+          aValue = a.category;
+          bValue = b.category;
+          break;
+        case 'subcategory':
+          aValue = a.subcategory;
+          bValue = b.subcategory;
           break;
         case 'status':
-          comparison = a.status.localeCompare(b.status);
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'version':
+          aValue = a.version || '';
+          bValue = b.version || '';
           break;
         case 'createdAt':
-          comparison = a.createdAt.toMillis() - b.createdAt.toMillis();
+          aValue = a.createdAt.toMillis();
+          bValue = b.createdAt.toMillis();
           break;
+        default:
+          return 0;
       }
       
-      return sortOrder === 'asc' ? comparison : -comparison;
+      if (sortDirection === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
     });
 
-  const getAccountName = (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId);
-    return account?.name || 'Unknown Account';
+  const getSortIcon = (field: SortField) => {
+    if (sortField === field) {
+      return (
+        <ArrowUpDown 
+          className={`h-3 w-3 ml-1 inline ${
+            sortDirection === 'desc' ? 'transform rotate-180' : ''
+          }`} 
+        />
+      );
+    }
+    return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-0 group-hover:opacity-50" />;
   };
 
-  const getContactCount = (contactIds: string[]) => {
-    return contactIds.length;
-  };
+  const CATEGORIES: ProductCategory[] = [
+    'Business Intelligence', 
+    'Revenue Management', 
+    'Distribution', 
+    'Guest Experience', 
+    'Operations', 
+    'Connectivity', 
+    'Booking Engine', 
+    'Channel Management',
+    'Other'
+  ];
+  
+  const STATUSES = ['Active', 'Deprecated', 'Development', 'Beta'];
 
+  const uniqueAccounts = Array.from(new Set(products.map(p => p.accountId)))
+    .map(accountId => accounts.find(a => a.id === accountId))
+    .filter(Boolean) as Account[];
 
+  const handleExportToExcel = () => {
+    try {
+      if (filteredAndSortedProducts.length === 0) {
+        alert('No products to export');
+        return;
+      }
 
-  const handleSort = (field: typeof sortBy) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('asc');
+      // Prepare data for export
+      const exportData = filteredAndSortedProducts.map((product) => {
+        const account = getAccount(product.accountId);
+        const productContacts = getContactsForProduct(product);
+        const productOpportunities = getOpportunitiesForProduct(product);
+        const activeOpportunities = getActiveOpportunitiesCount(product);
+        const totalDealValue = getTotalDealValue(product);
+        const wonDealValue = getWonDealValue(product);
+
+        return {
+          'Product Name': product.name,
+          'Account Name': account?.name || 'Unknown Account',
+          'Account Industry': account?.industry || '',
+          'Account Region': account?.region || '',
+          'Category': product.category,
+          'Subcategory': product.subcategory,
+          'Status': product.status,
+          'Version': product.version || '',
+          'Description': product.description || '',
+          'Target Market': product.targetMarket || '',
+          'Pricing': product.pricing || '',
+          'Website': product.website || '',
+          'Contact Count': productContacts.length,
+          'Contact Names': productContacts.map(c => c.name).join(', '),
+          'Primary Contact': productContacts.find(c => c.contactType === 'Primary')?.name || productContacts[0]?.name || '',
+          'Primary Contact Email': productContacts.find(c => c.contactType === 'Primary')?.email || productContacts[0]?.email || '',
+          'Technical Contact': productContacts.find(c => c.contactType === 'Technical')?.name || '',
+          'Technical Contact Email': productContacts.find(c => c.contactType === 'Technical')?.email || '',
+          'Total Opportunities': productOpportunities.length,
+          'Active Opportunities': activeOpportunities,
+          'Won Opportunities': productOpportunities.filter(opp => opp.stage === 'Closed-Won').length,
+          'Lost Opportunities': productOpportunities.filter(opp => opp.stage === 'Closed-Lost').length,
+          'Total Deal Value': totalDealValue,
+          'Won Deal Value': wonDealValue,
+          'Opportunity Titles': productOpportunities.map(opp => opp.title).join(', '),
+          'Tags': (product.tags || []).join(', '),
+          'Notes': product.notes || '',
+          'Created Date': format(product.createdAt.toDate(), 'yyyy-MM-dd'),
+          'Last Updated': product.updatedAt 
+            ? format(product.updatedAt.toDate(), 'yyyy-MM-dd') 
+            : ''
+        };
+      });
+
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+      // Auto-size columns
+      const columnWidths = [];
+      const headers = Object.keys(exportData[0] || {});
+      
+      headers.forEach((header, index) => {
+        const maxLength = Math.max(
+          header.length,
+          ...exportData.map(row => String(row[header as keyof typeof row] || '').length)
+        );
+        columnWidths[index] = { wch: Math.min(maxLength + 2, 50) }; // Cap at 50 characters
+      });
+      
+      worksheet['!cols'] = columnWidths;
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Products');
+
+      // Generate filename with current date
+      const filename = `products_export_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+
+      // Save file
+      XLSX.writeFile(workbook, filename);
+      
+      // Show success message
+      console.log(`Exported ${exportData.length} products to ${filename}`);
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      alert('Failed to export data to Excel. Please try again.');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-iol-red"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-6">
+    <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Products</h1>
-          <p className="text-gray-600">Manage partner products and solutions</p>
+      <div className="bg-white border-b border-gray-200 px-6 py-6">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Products</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {filteredAndSortedProducts.length} of {products.length} products
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportToExcel}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
+              title={`Export ${filteredAndSortedProducts.length} products to Excel`}
+            >
+              <Download className="h-4 w-4" />
+              Export Excel
+              <span className="ml-1 px-2 py-0.5 bg-green-500 text-green-100 text-xs rounded-full">
+                {filteredAndSortedProducts.length}
+              </span>
+            </button>
+            <button
+              onClick={handleAdd}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors shadow-sm"
+            >
+              <Plus className="h-4 w-4" />
+              New Product
+            </button>
+          </div>
         </div>
-        <Link
-          to="/products/new"
-          className="bg-iol-red hover:bg-iol-red-dark text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Add Product
-        </Link>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        {/* Search */}
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <input
-            type="text"
-            placeholder="Search products by name, description, or tags..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-iol-red focus:border-transparent"
-          />
-        </div>
-
-        {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Category Filter */}
-          <div className="relative">
+        
+        {/* Search and Filters */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <input
+              type="text"
+              placeholder="Search products, accounts, or categories..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
+            />
+          </div>
+          
+          <div className="flex gap-3">
             <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value as ProductCategory | 'All')}
-              className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-iol-red focus:border-transparent"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value as ProductCategory | 'All')}
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
             >
               <option value="All">All Categories</option>
-              {categories.map(category => (
+              {CATEGORIES.map(category => (
                 <option key={category} value={category}>{category}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
-          </div>
-
-          {/* Status Filter */}
-          <div className="relative">
+            
             <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-iol-red focus:border-transparent"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
             >
               <option value="All">All Statuses</option>
-              {statuses.map(status => (
+              {STATUSES.map(status => (
                 <option key={status} value={status}>{status}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
-          </div>
 
-          {/* Account Filter */}
-          <div className="relative">
             <select
-              value={selectedAccount}
-              onChange={(e) => setSelectedAccount(e.target.value)}
-              className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-iol-red focus:border-transparent"
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white shadow-sm"
             >
               <option value="All">All Accounts</option>
-              {accountNames.map(account => (
+              {uniqueAccounts.map(account => (
                 <option key={account.id} value={account.id}>{account.name}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
-          </div>
-
-          {/* Sort */}
-          <div className="relative">
-            <select
-              value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [field, order] = e.target.value.split('-');
-                setSortBy(field as typeof sortBy);
-                setSortOrder(order as 'asc' | 'desc');
-              }}
-              className="w-full appearance-none bg-white border border-gray-300 rounded-lg px-3 py-2 pr-8 focus:ring-2 focus:ring-iol-red focus:border-transparent"
-            >
-              <option value="name-asc">Name (A-Z)</option>
-              <option value="name-desc">Name (Z-A)</option>
-              <option value="category-asc">Category (A-Z)</option>
-              <option value="category-desc">Category (Z-A)</option>
-              <option value="status-asc">Status (A-Z)</option>
-              <option value="status-desc">Status (Z-A)</option>
-              <option value="createdAt-desc">Newest First</option>
-              <option value="createdAt-asc">Oldest First</option>
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 pointer-events-none" />
           </div>
         </div>
       </div>
 
-      {/* Results Summary */}
-      <div className="mb-4">
-        <p className="text-sm text-gray-600">
-          Showing {filteredProducts.length} of {products.length} products
-        </p>
-      </div>
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
+        {loading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+          </div>
+        ) : filteredAndSortedProducts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+            <Package className="h-12 w-12 text-gray-300 mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {searchTerm || categoryFilter !== 'All' || statusFilter !== 'All' || accountFilter !== 'All'
+                ? 'Try adjusting your search or filters' 
+                : 'Get started by creating your first product'}
+            </p>
+            {!searchTerm && categoryFilter === 'All' && statusFilter === 'All' && accountFilter === 'All' && (
+              <button
+                onClick={handleAdd}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Create Product
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="bg-white shadow-sm rounded-lg mx-6 mb-6 overflow-hidden border border-gray-200">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th 
+                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center">
+                        Product
+                        {getSortIcon('name')}
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Account
+                    </th>
+                    <th 
+                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      onClick={() => handleSort('category')}
+                    >
+                      <div className="flex items-center">
+                        Category & Type
+                        {getSortIcon('category')}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      onClick={() => handleSort('status')}
+                    >
+                      <div className="flex items-center">
+                        Status & Version
+                        {getSortIcon('status')}
+                      </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Contacts
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Opportunities
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Deal Value
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Target Market
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tags & Links
+                    </th>
+                    <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {filteredAndSortedProducts.map((product) => {
+                    const account = getAccount(product.accountId);
+                    const productContacts = getContactsForProduct(product);
+                    const productOpportunities = getOpportunitiesForProduct(product);
+                    const activeOpportunities = getActiveOpportunitiesCount(product);
+                    const totalDealValue = getTotalDealValue(product);
+                    const wonDealValue = getWonDealValue(product);
+                    
+                    return (
+                      <tr
+                        key={product.id}
+                        onClick={() => handleRowClick(product)}
+                        className="hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        {/* Product Name */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
+                              <span className="text-lg">{getCategoryIcon(product.category)}</span>
+                            </div>
+                            <div className="max-w-48">
+                              <div className="text-sm font-medium text-gray-900 line-clamp-1">
+                                {product.name}
+                              </div>
+                              {product.website && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Globe className="h-3 w-3 text-blue-500" />
+                                  <a 
+                                    href={product.website}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:text-blue-800 truncate"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {product.website.replace(/^https?:\/\//, '')}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
 
-      {/* Products Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map((product) => (
-          <Link 
-            key={product.id} 
-            to={`/products/${product.id}`}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow block"
-          >
-            {/* Product Header */}
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-red-100 rounded-lg">
-                  <Package className="h-6 w-6 text-iol-red" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900 line-clamp-2 leading-relaxed">{product.name}</h3>
-                  <p className="text-sm text-gray-500">{product.category}</p>
-                </div>
-              </div>
-              <span className={`px-2 py-1 text-xs rounded-full ${
-                product.status === 'Active' ? 'bg-green-100 text-green-800' :
-                product.status === 'Beta' ? 'bg-blue-100 text-blue-800' :
-                product.status === 'Development' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-gray-100 text-gray-800'
-              }`}>
-                {product.status}
-              </span>
+                        {/* Account */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-start">
+                            <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {account?.name || 'Unknown Account'}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {account?.industry} • {account?.region}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Category & Type */}
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getCategoryColor(product.category)}`}>
+                              {product.category}
+                            </span>
+                            <div className="text-xs text-gray-500">
+                              {product.subcategory}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Status & Version */}
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(product.status)}`}>
+                              {product.status}
+                            </span>
+                            {product.version && (
+                              <div className="flex items-center">
+                                <Code className="h-3 w-3 text-gray-400 mr-1" />
+                                <span className="text-xs text-gray-600">v{product.version}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Contacts */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <Users className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-900 font-medium">
+                              {productContacts.length}
+                            </span>
+                            {productContacts.length > 0 && (
+                              <div className="ml-2 text-xs text-gray-500 truncate max-w-24">
+                                {productContacts.find(c => c.contactType === 'Primary')?.name || productContacts[0].name}
+                                {productContacts.length > 1 && ` +${productContacts.length - 1}`}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Opportunities */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="flex items-center">
+                              <Activity className="h-4 w-4 text-blue-500 mr-1" />
+                              <span className="text-sm text-gray-900 font-medium">
+                                {productOpportunities.length}
+                              </span>
+                            </div>
+                            {activeOpportunities > 0 && (
+                              <div className="flex items-center">
+                                <Clock className="h-3 w-3 text-green-500 mr-1" />
+                                <span className="text-xs text-green-600">
+                                  {activeOpportunities} active
+                                </span>
+                              </div>
+                            )}
+                            {wonDealValue > 0 && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-3 w-3 text-blue-500 mr-1" />
+                                <span className="text-xs text-blue-600">
+                                  {productOpportunities.filter(opp => opp.stage === 'Closed-Won').length} won
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Deal Value */}
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            <div className="flex items-center">
+                              <DollarSign className="h-4 w-4 text-green-500 mr-1" />
+                              <span className="text-sm font-medium text-gray-900">
+                                {totalDealValue > 0 ? `$${totalDealValue.toLocaleString()}` : '$0'}
+                              </span>
+                            </div>
+                            {wonDealValue > 0 && (
+                              <div className="flex items-center">
+                                <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                                <span className="text-xs text-green-600">
+                                  ${wonDealValue.toLocaleString()} won
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Target Market */}
+                        <td className="px-6 py-4">
+                          <div>
+                            {product.targetMarket ? (
+                              <div className="text-sm text-gray-900 truncate max-w-32">
+                                {product.targetMarket}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-500">Not specified</span>
+                            )}
+                            {product.pricing && (
+                              <div className="text-xs text-gray-500 mt-1 truncate max-w-32">
+                                {product.pricing}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Tags & Links */}
+                        <td className="px-6 py-4">
+                          <div className="space-y-1">
+                            {(product.tags || []).length > 0 && (
+                              <div className="flex items-center">
+                                <Tag className="h-3 w-3 text-gray-400 mr-1" />
+                                <div className="flex flex-wrap gap-1">
+                                  {(product.tags || []).slice(0, 2).map((tag, index) => (
+                                    <span key={index} className="text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
+                                      {tag}
+                                    </span>
+                                  ))}
+                                  {(product.tags || []).length > 2 && (
+                                    <span className="text-xs text-gray-500">
+                                      +{(product.tags || []).length - 2}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            {product.description && (
+                              <div className="text-xs text-gray-500 truncate max-w-32" title={product.description}>
+                                {product.description}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/products/${product.id}`);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                              title="View Details"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/products/${product.id}`);
+                              }}
+                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                              title="Edit Product"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-
-            {/* Product Details */}
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Building2 className="h-4 w-4" />
-                <span>{getAccountName(product.accountId)}</span>
-              </div>
-              
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Users className="h-4 w-4" />
-                <span>{getContactCount(product.contactIds)} contact{getContactCount(product.contactIds) !== 1 ? 's' : ''}</span>
-              </div>
-
-              {product.subcategory && (
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Subcategory:</span> {product.subcategory}
-                </div>
-              )}
-
-              {product.version && (
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Version:</span> {product.version}
-                </div>
-              )}
-
-              {product.targetMarket && (
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Target:</span> {product.targetMarket}
-                </div>
-              )}
-            </div>
-
-            {/* Description */}
-            {product.description && (
-              <p className="text-sm text-gray-600 mb-4 line-clamp-2 leading-relaxed">
-                {product.description}
-              </p>
-            )}
-
-            {/* Tags */}
-            {product.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-4">
-                {product.tags.slice(0, 3).map((tag, index) => (
-                  <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                    {tag}
-                  </span>
-                ))}
-                {product.tags.length > 3 && (
-                  <span className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded">
-                    +{product.tags.length - 3}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Website Link */}
-            {product.website && (
-              <div className="flex items-center gap-2">
-                <ExternalLink className="h-4 w-4 text-gray-400" />
-                <a 
-                  href={product.website}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-iol-red hover:text-iol-red-dark truncate"
-                  onClick={(e) => e.preventDefault()}
-                >
-                  View Product
-                </a>
-              </div>
-            )}
-          </Link>
-        ))}
+          </div>
+        )}
       </div>
-
-      {filteredProducts.length === 0 && (
-        <div className="text-center py-12">
-          <Package className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
-          <p className="text-gray-500 mb-4">Try adjusting your search or filters</p>
-          <Link
-            to="/products/new"
-            className="bg-iol-red hover:bg-iol-red-dark text-white px-4 py-2 rounded-lg flex items-center gap-2 mx-auto transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Add Product
-          </Link>
-        </div>
-      )}
-
-
     </div>
   );
 }; 

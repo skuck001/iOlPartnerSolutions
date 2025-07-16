@@ -1,40 +1,62 @@
 import React from 'react';
-import type { Task, TaskStatus } from '../types';
+import type { Task, TaskStatus, ActivityStatus } from '../types';
 import { format } from 'date-fns';
-import { Clock, User } from 'lucide-react';
+import { Clock, User, CheckCircle } from 'lucide-react';
 
-interface TaskBoardProps {
-  tasks: Task[];
-  onTaskClick: (task: Task) => void;
-  onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
+// Generic task interface that works with both Task and EnhancedTask
+interface TaskLike {
+  id: string;
+  title: string;
+  status: ActivityStatus; // Changed to ActivityStatus
+  dueDate: any; // Timestamp
+  assignedTo: string;
+  bucket?: string;
+  opportunityTitle?: string;
+  accountName?: string;
+  activityType?: string;
+  priority?: 'High' | 'Medium' | 'Low';
 }
 
-const statusColumns: { status: TaskStatus; title: string; color: string }[] = [
-  { status: 'To do', title: 'To Do', color: 'bg-gray-100 text-gray-800' },
-  { status: 'In progress', title: 'In Progress', color: 'bg-blue-100 text-blue-800' },
-  { status: 'Done', title: 'Done', color: 'bg-green-100 text-green-800' }
+interface TaskBoardProps {
+  tasks: TaskLike[];
+  onTaskClick: (task: TaskLike) => void;
+  onStatusChange: (taskId: string, newStatus: TaskStatus) => void; // Keep for compatibility but not used
+}
+
+const statusColumns: { status: ActivityStatus; title: string; color: string }[] = [
+  { status: 'Scheduled', title: 'Scheduled', color: 'bg-blue-100 text-blue-800' },
+  { status: 'Completed', title: 'Completed', color: 'bg-green-100 text-green-800' },
+  { status: 'Cancelled', title: 'Cancelled', color: 'bg-red-100 text-red-800' }
 ];
 
 export const TaskBoard: React.FC<TaskBoardProps> = ({
   tasks,
-  onTaskClick,
-  onStatusChange
+  onTaskClick
+  // Removed onStatusChange as we don't use drag-and-drop status changes anymore
 }) => {
-  const getTasksByStatus = (status: TaskStatus) => 
+  const getTasksByStatus = (status: ActivityStatus) => 
     tasks.filter(task => task.status === status);
 
-  const handleDragStart = (e: React.DragEvent, task: Task) => {
-    e.dataTransfer.setData('text/plain', task.id);
+  const getPriorityColor = (priority?: 'High' | 'Medium' | 'Low') => {
+    switch (priority) {
+      case 'High': return 'bg-red-100 text-red-800';
+      case 'Medium': return 'bg-yellow-100 text-yellow-800';
+      case 'Low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, status: TaskStatus) => {
-    e.preventDefault();
-    const taskId = e.dataTransfer.getData('text/plain');
-    onStatusChange(taskId, status);
+  const getActivityIcon = (activityType?: string) => {
+    if (!activityType) return null;
+    switch (activityType) {
+      case 'Meeting': return '📅';
+      case 'Call': return '📞';
+      case 'Email': return '📧';
+      case 'WhatsApp': return '💬';
+      case 'Demo': return '🖥️';
+      case 'Workshop': return '🎯';
+      default: return '📋';
+    }
   };
 
   return (
@@ -44,8 +66,6 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
           <div
             key={column.status}
             className="bg-gray-50 rounded-lg p-4 flex flex-col"
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, column.status)}
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-gray-900">{column.title}</h3>
@@ -58,14 +78,31 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
               {getTasksByStatus(column.status).map((task) => (
                 <div
                   key={task.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, task)}
                   onClick={() => onTaskClick(task)}
                   className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
                 >
-                  <h4 className="font-medium text-gray-900 mb-2 line-clamp-2">
-                    {task.title}
-                  </h4>
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="font-medium text-gray-900 line-clamp-2 flex-1">
+                      {task.activityType && (
+                        <span className="mr-2">{getActivityIcon(task.activityType)}</span>
+                      )}
+                      {task.title}
+                    </h4>
+                    {task.priority && (
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(task.priority)} ml-2`}>
+                        {task.priority}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {task.opportunityTitle && (
+                    <div className="mb-2 text-sm text-gray-600">
+                      <span className="font-medium">🎯 {task.opportunityTitle}</span>
+                      {task.accountName && (
+                        <div className="text-xs text-gray-500 mt-1">🏢 {task.accountName}</div>
+                      )}
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-between text-sm text-gray-500">
                     <div className="flex items-center gap-1">
@@ -85,12 +122,20 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                       </span>
                     </div>
                   )}
+
+                  {/* Status indicator for completed tasks */}
+                  {task.status === 'Completed' && (
+                    <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      Completed
+                    </div>
+                  )}
                 </div>
               ))}
               
               {getTasksByStatus(column.status).length === 0 && (
                 <div className="text-center text-gray-400 py-8">
-                  No tasks in {column.title.toLowerCase()}
+                  No activities {column.title.toLowerCase()}
                 </div>
               )}
             </div>
