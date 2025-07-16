@@ -183,4 +183,26 @@ export const deleteContactWithSync = async (contactId: string) => {
   
   // Delete the contact
   await deleteDocument('contacts', contactId);
+};
+
+// Helper function to update contact's lastContactDate when activities are completed
+export const updateContactsLastActivity = async (contactIds: string[], activityDate: Date) => {
+  for (const contactId of contactIds) {
+    try {
+      const contact = await getDocument('contacts', contactId);
+      if (contact) {
+        const currentLastContact = contact.lastContactDate?.toDate();
+        
+        // Only update if this activity is more recent than the current lastContactDate
+        if (!currentLastContact || activityDate > currentLastContact) {
+          await updateDocument('contacts', contactId, {
+            lastContactDate: Timestamp.fromDate(activityDate),
+            updatedAt: Timestamp.now()
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`Error updating lastContactDate for contact ${contactId}:`, error);
+    }
+  }
 }; 

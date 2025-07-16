@@ -86,8 +86,8 @@ export const TaskBoard: React.FC<TaskBoardProps> = ({
                       {task.activityType && (
                         <span className="mr-2">{getActivityIcon(task.activityType)}</span>
                       )}
-                      {task.title}
-                    </h4>
+                    {task.title}
+                  </h4>
                     {task.priority && (
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(task.priority)} ml-2`}>
                         {task.priority}

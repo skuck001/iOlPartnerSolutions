@@ -12,12 +12,21 @@ import {
   Clock,
   Calendar,
   Package,
-  Globe
+  Globe,
+  Activity,
+  MessageSquare,
+  PhoneCall,
+  Video,
+  Users,
+  ExternalLink,
+  Plus,
+  CheckCircle,
+  AlertTriangle
 } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
-import type { Contact, Account, Product, ContactType } from '../types';
+import type { Contact, Account, Product, ContactType, Opportunity, Activity as ActivityType, ActivityStatus } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument, updateContactWithSync, deleteContactWithSync } from '../lib/firestore';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 
 const contactTypes: ContactType[] = [
   'Primary',
@@ -38,6 +47,8 @@ export const ContactDetails: React.FC = () => {
   const [contact, setContact] = useState<Contact | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [contactActivities, setContactActivities] = useState<ActivityType[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
@@ -64,12 +75,14 @@ export const ContactDetails: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [accountsData, productsData] = await Promise.all([
+      const [accountsData, productsData, opportunitiesData] = await Promise.all([
         getDocuments('accounts'),
-        getDocuments('products')
+        getDocuments('products'),
+        getDocuments('opportunities')
       ]);
       setAccounts(accountsData as Account[]);
       setProducts(productsData as Product[]);
+      setOpportunities(opportunitiesData as Opportunity[]);
 
       if (!isNew && id && id !== 'new') {
         const contactData = await getDocument('contacts', id);
@@ -77,6 +90,10 @@ export const ContactDetails: React.FC = () => {
           const contactTyped = contactData as Contact;
           setContact(contactTyped);
           setFormData(contactTyped);
+          
+          // Extract activities related to this contact
+          const relatedActivities = extractContactActivities(opportunitiesData as Opportunity[], id);
+          setContactActivities(relatedActivities);
         }
       }
     } catch (error) {
@@ -84,6 +101,28 @@ export const ContactDetails: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to extract activities related to a specific contact
+  const extractContactActivities = (opportunities: Opportunity[], contactId: string): ActivityType[] => {
+    const activities: ActivityType[] = [];
+    
+    opportunities.forEach(opportunity => {
+      if (opportunity.activities) {
+        opportunity.activities.forEach(activity => {
+          if (activity.relatedContactIds.includes(contactId)) {
+            activities.push({
+              ...activity,
+              opportunityTitle: opportunity.title,
+              opportunityId: opportunity.id
+            } as any);
+          }
+        });
+      }
+    });
+    
+    // Sort activities by date (newest first)
+    return activities.sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis());
   };
 
   const getAccountName = (accountId: string) => {
@@ -94,6 +133,29 @@ export const ContactDetails: React.FC = () => {
   const selectedAccount = accounts.find(a => a.id === formData.accountId);
   const availableProducts = products.filter(p => p.accountId === formData.accountId);
   const selectedProducts = products.filter(p => formData.productIds?.includes(p.id || ''));
+
+  // Helper function to get activity type icon
+  const getActivityIcon = (activityType: string) => {
+    const iconMap = {
+      'Meeting': Video,
+      'Email': Mail,
+      'Call': PhoneCall,
+      'WhatsApp': MessageSquare,
+      'Demo': Video,
+      'Workshop': Users
+    };
+    return iconMap[activityType as keyof typeof iconMap] || Activity;
+  };
+
+  // Helper function to get status color
+  const getStatusColor = (status: ActivityStatus) => {
+    const colors = {
+      'Scheduled': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Completed': 'bg-green-100 text-green-800 border-green-200',
+      'Cancelled': 'bg-red-100 text-red-800 border-red-200'
+    };
+    return colors[status];
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -455,6 +517,36 @@ export const ContactDetails: React.FC = () => {
                         <span className="text-gray-500">Products:</span>
                         <p className="text-gray-900">{selectedProducts.length} associated</p>
                       </div>
+                      <div>
+                        <span className="text-gray-500">Activities:</span>
+                        <p className="text-gray-900">{contactActivities.length} recorded</p>
+                      </div>
+                      {contact?.lastContactDate && (
+                        <div>
+                          <span className="text-gray-500">Last Contact:</span>
+                          <p className="text-gray-900">{format(contact.lastContactDate.toDate(), 'MMM d, yyyy')}</p>
+                          <p className="text-xs text-gray-500">
+                            {formatDistanceToNow(contact.lastContactDate.toDate(), { addSuffix: true })}
+                          </p>
+                        </div>
+                      )}
+                      {(() => {
+                        // Find the most recent completed activity
+                        const completedActivities = contactActivities.filter(a => a.status === 'Completed');
+                        if (completedActivities.length > 0) {
+                          const latestCompleted = completedActivities[0];
+                          return (
+                            <div>
+                              <span className="text-gray-500">Latest Activity:</span>
+                              <p className="text-gray-900">{latestCompleted.subject}</p>
+                              <p className="text-xs text-gray-500">
+                                {formatDistanceToNow(latestCompleted.completedAt?.toDate() || latestCompleted.dateTime.toDate(), { addSuffix: true })}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   </div>
                 )}
@@ -512,6 +604,119 @@ export const ContactDetails: React.FC = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Activity Timeline Section */}
+            {!isNew && contactActivities.length > 0 && (
+              <div className="bg-white shadow rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-gray-500" />
+                    <h2 className="text-base font-medium text-gray-900">Activity Timeline ({contactActivities.length})</h2>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  {contactActivities.map((activity, index) => {
+                    const ActivityIcon = getActivityIcon(activity.activityType);
+                    const isOverdue = activity.status === 'Scheduled' && activity.dateTime.toDate() < new Date();
+                    
+                    return (
+                      <div key={`${activity.id}-${index}`} className="relative flex items-start space-x-3 pb-4 border-b border-gray-100 last:border-b-0 last:pb-0">
+                        {/* Timeline line */}
+                        {index < contactActivities.length - 1 && (
+                          <div className="absolute left-4 top-8 bottom-0 w-px bg-gray-200" />
+                        )}
+                        
+                        {/* Activity icon */}
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center border-2 bg-white ${
+                          activity.status === 'Completed' ? 'border-green-500' : 
+                          activity.status === 'Cancelled' ? 'border-red-500' : 
+                          isOverdue ? 'border-red-500' : 'border-blue-500'
+                        }`}>
+                          <ActivityIcon className={`h-4 w-4 ${
+                            activity.status === 'Completed' ? 'text-green-500' : 
+                            activity.status === 'Cancelled' ? 'text-red-500' : 
+                            isOverdue ? 'text-red-500' : 'text-blue-500'
+                          }`} />
+                        </div>
+                        
+                        {/* Activity content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-medium text-gray-900">
+                                {activity.subject}
+                              </h3>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(activity.status)}`}>
+                                {activity.status}
+                              </span>
+                              {isOverdue && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Overdue
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">
+                                {formatDistanceToNow(activity.dateTime.toDate(), { addSuffix: true })}
+                              </span>
+                              <Link
+                                to={`/opportunities/${(activity as any).opportunityId}`}
+                                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                View Opportunity
+                              </Link>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-4 text-xs text-gray-600 mb-2">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {format(activity.dateTime.toDate(), 'MMM d, yyyy • h:mm a')}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Package className="h-3 w-3" />
+                              {(activity as any).opportunityTitle}
+                            </span>
+                            <span className="capitalize">
+                              {activity.method}
+                            </span>
+                          </div>
+                          
+                          {activity.notes && (
+                            <p className="text-sm text-gray-600 mt-2 bg-gray-50 rounded p-2">
+                              {activity.notes}
+                            </p>
+                          )}
+                          
+                          {activity.completedAt && (
+                            <div className="flex items-center gap-2 text-xs text-green-700 mt-2">
+                              <CheckCircle className="h-3 w-3" />
+                              Completed: {format(activity.completedAt.toDate(), 'MMM d, yyyy • h:mm a')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* No activities message */}
+            {!isNew && contactActivities.length === 0 && (
+              <div className="bg-white shadow rounded-lg p-6">
+                <div className="text-center">
+                  <Activity className="mx-auto h-12 w-12 text-gray-300" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No activities found</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    No interactions have been recorded for this contact yet.
+                  </p>
+                </div>
               </div>
             )}
           </form>

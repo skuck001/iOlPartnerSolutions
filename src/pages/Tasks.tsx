@@ -521,19 +521,19 @@ export const Tasks: React.FC = () => {
 
       {/* 7-Day Calendar View */}
       {viewMode === 'scheduled' && (
-        <div className="px-6 py-4 bg-white border-b border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Next 7 Days</h3>
+        <div className="px-6 py-3 bg-gray-900 border-b border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-white">Next 7 Days</h3>
             {selectedDate && (
               <button
                 onClick={() => setSelectedDate(null)}
-                className="text-sm text-iol-red hover:text-iol-red-dark"
+                className="text-xs text-iol-red hover:text-red-400 transition-colors"
               >
                 Clear filter
               </button>
             )}
           </div>
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1">
             {next7Days.map((date, index) => {
               const tasksCount = getTasksForDate(date).length;
               const isSelected = selectedDate && isSameDay(date, selectedDate);
@@ -543,31 +543,31 @@ export const Tasks: React.FC = () => {
                 <button
                   key={index}
                   onClick={() => setSelectedDate(isSelected ? null : date)}
-                  className={`p-3 rounded-lg border transition-all ${
+                  className={`p-2 rounded-md transition-all ${
                     isSelected 
-                      ? 'bg-iol-red text-white border-iol-red' 
+                      ? 'bg-iol-red text-white shadow-lg' 
                       : isCurrentDay
-                      ? 'bg-blue-50 border-blue-200 text-blue-900'
-                      : 'bg-white border-gray-200 hover:bg-gray-50'
+                      ? 'bg-gray-700 text-blue-400 border border-blue-400'
+                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-600'
                   }`}
                 >
                   <div className="text-center">
                     <p className={`text-xs font-medium ${
-                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-600' : 'text-gray-600'
+                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-400' : 'text-gray-400'
                     }`}>
                       {format(date, 'EEE')}
                     </p>
-                    <p className={`text-lg font-bold mt-1 ${
-                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-900' : 'text-gray-900'
+                    <p className={`text-sm font-bold mt-0.5 ${
+                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-400' : 'text-gray-200'
                     }`}>
                       {format(date, 'd')}
                     </p>
                     {tasksCount > 0 && (
-                      <div className={`mt-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium mx-auto ${
+                      <div className={`mt-1 w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold mx-auto ${
                         isSelected 
                           ? 'bg-white text-iol-red'
                           : isCurrentDay
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-blue-500 text-white'
                           : 'bg-iol-red text-white'
                       }`}>
                         {tasksCount}

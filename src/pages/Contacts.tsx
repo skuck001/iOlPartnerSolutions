@@ -24,7 +24,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { Contact, ContactType, Account, Product, Opportunity } from '../types';
+import type { Contact, ContactType, Account, Product, Opportunity, Activity as ActivityType } from '../types';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
@@ -89,6 +89,44 @@ export const Contacts: React.FC = () => {
     return contactOpportunities.filter(opp => 
       opp.stage !== 'Closed-Won' && opp.stage !== 'Closed-Lost'
     ).length;
+  };
+
+  const getMostRecentActivity = (contact: Contact): ActivityType | null => {
+    let mostRecentActivity: ActivityType | null = null;
+    let mostRecentDate: Date | null = null;
+    
+    opportunities.forEach(opportunity => {
+      if (opportunity.activities) {
+        opportunity.activities.forEach(activity => {
+          // Only consider completed activities for "last contact"
+          if (activity.relatedContactIds.includes(contact.id || '') && activity.status === 'Completed') {
+            const activityDate = activity.completedAt?.toDate() || activity.dateTime.toDate();
+            if (!mostRecentDate || activityDate > mostRecentDate) {
+              mostRecentDate = activityDate;
+              mostRecentActivity = {
+                ...activity,
+                opportunityTitle: opportunity.title,
+                opportunityId: opportunity.id
+              } as any;
+            }
+          }
+        });
+      }
+    });
+    
+    return mostRecentActivity;
+  };
+
+  const getActivityIcon = (activityType: string) => {
+    const iconMap = {
+      'Meeting': Calendar,
+      'Email': Mail,
+      'Call': Phone,
+      'WhatsApp': MessageSquare,
+      'Demo': Calendar,
+      'Workshop': Users
+    };
+    return iconMap[activityType as keyof typeof iconMap] || Activity;
   };
 
   const isContactOverdue = (contact: Contact) => {
@@ -586,27 +624,55 @@ export const Contacts: React.FC = () => {
                         {/* Last Contact */}
                         <td className="px-6 py-4">
                           <div className="flex items-center">
-                            {contact.lastContactDate ? (
-                              <>
-                                <Calendar className={`h-4 w-4 mr-2 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} />
-                                <div>
-                                  <div className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                                    {formatDistanceToNow(contact.lastContactDate.toDate(), { addSuffix: true })}
-                                  </div>
-                                  <div className="text-xs text-gray-500">
-                                    {format(contact.lastContactDate.toDate(), 'MMM d, yyyy')}
-                                  </div>
-                                  {isOverdue && (
-                                    <div className="flex items-center gap-1 text-xs text-red-600">
-                                      <AlertTriangle className="h-3 w-3" />
-                                      Overdue
+                            {(() => {
+                              const recentActivity = getMostRecentActivity(contact);
+                              const ActivityIcon = recentActivity ? getActivityIcon(recentActivity.activityType) : Calendar;
+                              
+                              // Use completed activity date or fallback to lastContactDate
+                              const displayDate = recentActivity ? 
+                                (recentActivity.completedAt?.toDate() || recentActivity.dateTime.toDate()) : 
+                                contact.lastContactDate?.toDate();
+                              
+                              if (displayDate) {
+                                return (
+                                  <>
+                                    <ActivityIcon className={`h-4 w-4 mr-2 ${
+                                      isOverdue ? 'text-red-500' : 'text-gray-400'
+                                    }`} />
+                                    <div>
+                                      <div className={`text-sm ${
+                                        isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'
+                                      }`}>
+                                        {formatDistanceToNow(displayDate, { addSuffix: true })}
+                                      </div>
+                                      <div className="text-xs text-gray-500">
+                                        {format(displayDate, 'MMM d, yyyy')}
+                                      </div>
+                                      {recentActivity && (
+                                        <div className="flex items-center gap-1 text-xs text-gray-600">
+                                          <span className="capitalize">{recentActivity.activityType}</span>
+                                          <CheckCircle className="h-3 w-3 text-green-500" />
+                                          <span className="text-green-600">Completed</span>
+                                        </div>
+                                      )}
+                                      {!recentActivity && isOverdue && (
+                                        <div className="flex items-center gap-1 text-xs text-red-600">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          Overdue
+                                        </div>
+                                      )}
                                     </div>
-                                  )}
-                                </div>
-                              </>
-                            ) : (
-                              <span className="text-sm text-gray-500">Never contacted</span>
-                            )}
+                                  </>
+                                );
+                              } else {
+                                return (
+                                  <div className="flex items-center">
+                                    <Activity className="h-4 w-4 mr-2 text-gray-300" />
+                                    <span className="text-sm text-gray-500">No contact recorded</span>
+                                  </div>
+                                );
+                              }
+                            })()}
                           </div>
                         </td>
 
