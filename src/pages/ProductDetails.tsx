@@ -14,10 +14,11 @@ import {
   Network,
   Mail,
   Phone,
-  Calendar
+  Calendar,
+  Briefcase
 } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
-import type { Product, Account, Contact } from '../types';
+import type { Product, Account, Contact, ContactType, Opportunity } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument, updateProductWithSync, deleteProductWithSync } from '../lib/firestore';
 import { format } from 'date-fns';
 
@@ -40,9 +41,18 @@ export const ProductDetails: React.FC = () => {
   const [account, setAccount] = useState<Account | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [newTag, setNewTag] = useState('');
+  const [showCreateContact, setShowCreateContact] = useState(false);
+  const [showSuggestedContacts, setShowSuggestedContacts] = useState(false);
+  const [newContact, setNewContact] = useState({
+    name: '',
+    email: '',
+    position: '',
+    phone: ''
+  });
   
   const [formData, setFormData] = useState({
     name: '',
@@ -63,12 +73,14 @@ export const ProductDetails: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [accountsData, contactsData] = await Promise.all([
+      const [accountsData, contactsData, opportunitiesData] = await Promise.all([
         getDocuments('accounts'),
-        getDocuments('contacts')
+        getDocuments('contacts'),
+        getDocuments('opportunities')
       ]);
       setAccounts(accountsData as Account[]);
       setContacts(contactsData as Contact[]);
+      setOpportunities(opportunitiesData as Opportunity[]);
 
       if (!isNew && id && id !== 'new') {
         const productData = await getDocument('products', id);
@@ -181,6 +193,32 @@ export const ProductDetails: React.FC = () => {
     setFormData({ ...formData, contactIds: newContactIds });
   };
 
+  const handleCreateContact = async () => {
+    if (newContact.name.trim() && newContact.email.trim()) {
+      try {
+        const contactData = {
+          ...newContact,
+          accountId: formData.accountId,
+          contactType: 'Primary' as ContactType,
+          productIds: [],
+          createdAt: Timestamp.now()
+        };
+        
+        const docRef = await createDocument('contacts', contactData);
+        
+        // Refresh contacts and add to product
+        await fetchData();
+        handleContactToggle(docRef.id);
+        
+        // Reset form
+        setNewContact({ name: '', email: '', position: '', phone: '' });
+        setShowCreateContact(false);
+      } catch (error) {
+        console.error('Error creating contact:', error);
+      }
+    }
+  };
+
   const handleAddTag = () => {
     if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
       setFormData({
@@ -209,6 +247,9 @@ export const ProductDetails: React.FC = () => {
     formData.accountId && c.accountId === formData.accountId && !formData.contactIds.includes(c.id || '')
   );
   const allRelatedContacts = [...directContacts, ...accountContacts];
+  
+  // Get opportunities specifically assigned to this product
+  const relatedOpportunities = opportunities.filter(o => o.productId === id);
 
   if (loading) {
     return (
@@ -373,6 +414,61 @@ export const ProductDetails: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Opportunities */}
+                {relatedOpportunities.length > 0 && (
+                  <div className="bg-white shadow rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Briefcase className="h-4 w-4 text-gray-500" />
+                        <h2 className="text-base font-medium text-gray-900">Opportunities ({relatedOpportunities.length})</h2>
+                      </div>
+                      <Link
+                        to="/opportunities"
+                        className="text-xs text-primary-600 hover:text-primary-700"
+                      >
+                        View all
+                      </Link>
+                    </div>
+                    <div className="space-y-2">
+                      {relatedOpportunities.map((opportunity) => (
+                        <div key={opportunity.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <Link
+                                to={`/opportunities/${opportunity.id}`}
+                                className="text-sm font-medium text-gray-900 hover:text-primary-600 block"
+                              >
+                                {opportunity.title}
+                              </Link>
+                              {opportunity.summary && (
+                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{opportunity.summary}</p>
+                              )}
+                              <div className="flex items-center gap-2 mt-2">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  opportunity.stage === 'Closed-Won' ? 'bg-green-100 text-green-800' :
+                                  opportunity.stage === 'Closed-Lost' ? 'bg-red-100 text-red-800' :
+                                  opportunity.stage === 'Negotiation' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {opportunity.stage}
+                                </span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  opportunity.priority === 'Critical' ? 'bg-red-100 text-red-800' :
+                                  opportunity.priority === 'High' ? 'bg-orange-100 text-orange-800' :
+                                  opportunity.priority === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {opportunity.priority}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right Column - Tags & Metadata */}
@@ -422,6 +518,164 @@ export const ProductDetails: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Contacts */}
+                <div className="bg-white shadow rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-gray-500" />
+                      <h2 className="text-base font-medium text-gray-900">
+                        Contacts ({directContacts.length})
+                      </h2>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateContact(!showCreateContact)}
+                      className="px-2 py-1 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-md hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
+                    >
+                      <Plus className="h-3 w-3 mr-1 inline" />
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Assigned contacts */}
+                  {directContacts.length > 0 && (
+                    <div className="space-y-2 mb-3">
+                      {directContacts.map((contact) => (
+                        <div key={contact.id} className="bg-blue-50 border-blue-200 rounded-lg p-2 border relative">
+                          <button
+                            type="button"
+                            onClick={() => handleContactToggle(contact.id || '')}
+                            className="absolute top-1 right-1 text-blue-400 hover:text-blue-600"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                          <Link
+                            to={`/contacts/${contact.id}`}
+                            className="text-xs font-medium text-blue-900 hover:text-blue-700 block truncate pr-4"
+                          >
+                            {contact.name}
+                          </Link>
+                          {contact.position && (
+                            <p className="text-xs text-blue-700 mt-0.5 truncate">{contact.position}</p>
+                          )}
+                          {contact.email && (
+                            <p className="text-xs text-blue-600 mt-0.5 truncate">{contact.email}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Create contact form (collapsible) */}
+                  {showCreateContact && (
+                    <div className="border border-gray-200 rounded-lg p-3 mb-3 bg-gray-50">
+                      <h3 className="text-sm font-medium text-gray-900 mb-2">Create New Contact</h3>
+                      <div className="space-y-2">
+                        <input
+                          type="text"
+                          placeholder="Contact name..."
+                          value={newContact.name}
+                          onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+                          className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                        <input
+                          type="email"
+                          placeholder="Email address..."
+                          value={newContact.email}
+                          onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
+                          className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            placeholder="Position..."
+                            value={newContact.position}
+                            onChange={(e) => setNewContact({ ...newContact, position: e.target.value })}
+                            className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                          <input
+                            type="tel"
+                            placeholder="Phone..."
+                            value={newContact.phone}
+                            onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+                            className="w-full text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateContact(false)}
+                            className="px-2 py-1 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-200 rounded-md hover:bg-gray-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCreateContact}
+                            className="px-2 py-1 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-md hover:bg-primary-100"
+                          >
+                            Create
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show suggestions button and suggested contacts */}
+                  {accountContacts.length > 0 && (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setShowSuggestedContacts(!showSuggestedContacts)}
+                        className="w-full text-xs text-gray-600 hover:text-gray-800 py-2 border-t border-gray-200 transition-colors"
+                      >
+                        {showSuggestedContacts ? 'Hide' : 'Show'} suggestions ({accountContacts.length})
+                      </button>
+                      
+                      {showSuggestedContacts && (
+                        <div className="mt-2 space-y-1">
+                          {accountContacts.map((contact) => (
+                            <div 
+                              key={contact.id} 
+                              className="bg-gray-50 border-gray-200 rounded-lg p-2 border relative"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleContactToggle(contact.id || '')}
+                                className="absolute top-1 right-1 text-gray-400 hover:text-gray-600"
+                              >
+                                <Plus className="h-3 w-3" />
+                              </button>
+                              <Link
+                                to={`/contacts/${contact.id}`}
+                                className="text-xs font-medium text-gray-900 hover:text-primary-600 block truncate pr-4"
+                              >
+                                {contact.name}
+                              </Link>
+                              <p className="text-xs text-gray-600 mt-0.5">
+                                From Account • {contact.position || 'No title'}
+                              </p>
+                              {contact.email && (
+                                <p className="text-xs text-gray-500 mt-0.5 truncate">{contact.email}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {accountContacts.length === 0 && directContacts.length === 0 && (
+                    <p className="text-xs text-gray-500 italic">
+                      {formData.accountId 
+                        ? 'No contacts found for this account' 
+                        : 'Select an account to see related contacts'
+                      }
+                    </p>
+                  )}
+                </div>
+
                 {/* Quick Stats */}
                 {!isNew && (
                   <div className="bg-white shadow rounded-lg p-4">
@@ -440,143 +694,26 @@ export const ProductDetails: React.FC = () => {
                         <span className="text-gray-500">Contacts:</span>
                         <p className="text-gray-900">{allRelatedContacts.length} associated</p>
                       </div>
+                      <div>
+                        <span className="text-gray-500">Opportunities:</span>
+                        <p className="text-gray-900">{relatedOpportunities.length} related</p>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Contacts Section - Full Width */}
-            <div className="bg-white shadow rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-gray-500" />
-                  <h2 className="text-base font-medium text-gray-900">
-                    Related Contacts ({allRelatedContacts.length})
-                  </h2>
-                </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span className="text-gray-600">Direct Contact</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                    <span className="text-gray-600">Account Contact</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Contact Selection - Hidden but maintained for form functionality */}
-              <div className="hidden">
-                {availableContacts.map((contact) => (
-                  <input
-                    key={contact.id}
-                    type="checkbox"
-                    checked={formData.contactIds.includes(contact.id)}
-                    onChange={() => handleContactToggle(contact.id)}
-                  />
-                ))}
-              </div>
-
-              {/* All Related Contacts Display */}
-              {allRelatedContacts.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {allRelatedContacts.map((contact) => {
-                    const isDirect = formData.contactIds.includes(contact.id || '');
-                    return (
-                      <div 
-                        key={contact.id} 
-                        className={`rounded-lg p-3 border relative ${
-                          isDirect 
-                            ? 'bg-blue-50 border-blue-200' 
-                            : 'bg-gray-50 border-gray-200'
-                        }`}
-                      >
-                        {/* Contact Type Indicator */}
-                        <div className="absolute top-2 right-2">
-                          <div 
-                            className={`w-2 h-2 rounded-full ${
-                              isDirect ? 'bg-blue-500' : 'bg-gray-400'
-                            }`}
-                            title={isDirect ? 'Direct Product Contact' : 'Account Contact'}
-                          ></div>
-                        </div>
-                        
-                        {/* Toggle Direct Association Button */}
-                        <button
-                          type="button"
-                          onClick={() => handleContactToggle(contact.id)}
-                          className={`absolute top-1 left-1 w-4 h-4 rounded-full border text-xs font-bold transition-all ${
-                            isDirect
-                              ? 'bg-blue-500 border-blue-600 text-white hover:bg-blue-600'
-                              : 'bg-white border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500'
-                          }`}
-                          title={isDirect ? 'Remove from product' : 'Add to product'}
-                        >
-                          {isDirect ? '−' : '+'}
-                        </button>
-
-                        <div className="pt-2">
-                          <Link
-                            to={`/contacts/${contact.id}`}
-                            className={`text-sm font-medium hover:text-primary-600 block truncate ${
-                              isDirect ? 'text-blue-900' : 'text-gray-900'
-                            }`}
-                          >
-                            {contact.name}
-                          </Link>
-                          {contact.position && (
-                            <p className={`text-xs mt-0.5 truncate ${
-                              isDirect ? 'text-blue-700' : 'text-gray-500'
-                            }`}>
-                              {contact.position}
-                            </p>
-                          )}
-                          <div className="mt-1.5 space-y-0.5">
-                            {contact.email && (
-                              <div className={`flex items-center text-xs ${
-                                isDirect ? 'text-blue-600' : 'text-gray-600'
-                              }`}>
-                                <Mail className="h-3 w-3 mr-1 flex-shrink-0" />
-                                <a 
-                                  href={`mailto:${contact.email}`} 
-                                  className="hover:text-primary-600 truncate"
-                                >
-                                  {contact.email}
-                                </a>
-                              </div>
-                            )}
-                            {contact.phone && (
-                              <div className={`flex items-center text-xs ${
-                                isDirect ? 'text-blue-600' : 'text-gray-600'
-                              }`}>
-                                <Phone className="h-3 w-3 mr-1 flex-shrink-0" />
-                                <a 
-                                  href={`tel:${contact.phone}`} 
-                                  className="hover:text-primary-600"
-                                >
-                                  {contact.phone}
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Users className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  <p className="text-sm">
-                    {formData.accountId 
-                      ? 'No contacts found for this account' 
-                      : 'Select an account to see related contacts'
-                    }
-                  </p>
-                </div>
-              )}
+            {/* Contact Selection - Hidden but maintained for form functionality */}
+            <div className="hidden">
+              {availableContacts.map((contact) => (
+                <input
+                  key={contact.id}
+                  type="checkbox"
+                  checked={formData.contactIds.includes(contact.id)}
+                  onChange={() => handleContactToggle(contact.id)}
+                />
+              ))}
             </div>
           </form>
         </div>
