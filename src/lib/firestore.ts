@@ -15,7 +15,8 @@ import {
   QueryConstraint
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Contact, Product } from '../types';
+import type { Contact } from '../types/Contact';
+import type { Product } from '../types/Product';
 
 // Generic collection reference
 export const getCollection = (collectionName: string) => collection(db, collectionName);

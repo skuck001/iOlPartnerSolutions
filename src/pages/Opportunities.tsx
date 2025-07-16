@@ -22,15 +22,62 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Opportunity, OpportunityStage, OpportunityPriority, Account, Contact, Product } from '../types';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
 type SortField = 'title' | 'stage' | 'priority' | 'estimatedDealValue' | 'expectedCloseDate' | 'lastActivityDate' | 'createdAt' | 'accountName';
 type SortDirection = 'asc' | 'desc';
 
+// Helper function to convert various date formats to Date object
+const toDate = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    // Check if it's a valid date
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    const date = dateValue.toDate();
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // If it's a string or number, parse it
+  const parsedDate = new Date(dateValue);
+  return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+};
+
+// Helper function to get milliseconds from various date formats
+const toMillis = (dateValue: any): number => {
+  if (!dateValue) return 0;
+  
+  // If it has a toMillis method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toMillis === 'function') {
+    return dateValue.toMillis();
+  }
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? 0 : dateValue.getTime();
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    const date = dateValue.toDate();
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  
+  // If it's a string or number, parse it
+  const parsedDate = new Date(dateValue);
+  return isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
+};
+
 export const Opportunities: React.FC = () => {
   const navigate = useNavigate();
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError } = useOpportunitiesApi();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -42,27 +89,39 @@ export const Opportunities: React.FC = () => {
   const [priorityFilter, setPriorityFilter] = useState<OpportunityPriority | 'All'>('All');
 
   useEffect(() => {
-    fetchData();
+    fetchRelatedData();
   }, []);
 
-  const fetchData = async () => {
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!opportunitiesLoading && accounts.length > 0 && contacts.length > 0 && products.length > 0) {
+      setLoading(false);
+    } else if (!opportunitiesLoading && opportunities && opportunities.length === 0) {
+      // Handle case where opportunities is empty but other data might be loading
+      setLoading(false);
+    }
+  }, [opportunitiesLoading, opportunities, accounts, contacts, products]);
+
+  const fetchRelatedData = async () => {
     try {
-      const [oppsData, accountsData, contactsData, productsData] = await Promise.all([
-        getDocuments('opportunities'),
+      const [accountsData, contactsData, productsData] = await Promise.all([
         getDocuments('accounts'),
         getDocuments('contacts'),
         getDocuments('products')
       ]);
-      setOpportunities(oppsData as Opportunity[]);
       setAccounts(accountsData as Account[]);
       setContacts(contactsData as Contact[]);
       setProducts(productsData as Product[]);
     } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
+      console.error('Error fetching related data:', error);
       setLoading(false);
     }
   };
+
+  // Show error if opportunities failed to load
+  if (opportunitiesError) {
+    console.error('Error loading opportunities:', opportunitiesError);
+  }
 
   const getAccountName = (accountId: string) => {
     const account = accounts.find(a => a.id === accountId);
@@ -81,14 +140,14 @@ export const Opportunities: React.FC = () => {
   const getNextScheduledActivity = (opportunity: Opportunity) => {
     const scheduledActivities = (opportunity.activities || [])
       .filter(a => a.status === 'Scheduled')
-      .sort((a, b) => a.dateTime.toMillis() - b.dateTime.toMillis());
+      .sort((a, b) => toMillis(a.dateTime) - toMillis(b.dateTime));
     return scheduledActivities[0] || null;
   };
 
   const getLastCompletedActivity = (opportunity: Opportunity) => {
     const completedActivities = (opportunity.activities || [])
       .filter(a => a.status === 'Completed')
-      .sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis());
+      .sort((a, b) => toMillis(b.dateTime) - toMillis(a.dateTime));
     return completedActivities[0] || null;
   };
 
@@ -150,10 +209,10 @@ export const Opportunities: React.FC = () => {
 
   const isOpportunityOverdue = (opportunity: Opportunity) => {
     if (!opportunity.expectedCloseDate) return false;
-    return isBefore(opportunity.expectedCloseDate.toDate(), startOfDay(new Date()));
+    return isBefore(toDate(opportunity.expectedCloseDate), startOfDay(new Date()));
   };
 
-  const filteredAndSortedOpportunities = opportunities
+  const filteredAndSortedOpportunities = (opportunities || [])
     .filter(opp => {
       const matchesSearch = (
         opp.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -191,16 +250,16 @@ export const Opportunities: React.FC = () => {
           bValue = b.estimatedDealValue || 0;
           break;
         case 'expectedCloseDate':
-          aValue = a.expectedCloseDate?.toMillis() || 0;
-          bValue = b.expectedCloseDate?.toMillis() || 0;
+          aValue = toMillis(a.expectedCloseDate) || 0;
+          bValue = toMillis(b.expectedCloseDate) || 0;
           break;
         case 'lastActivityDate':
-          aValue = a.lastActivityDate?.toMillis() || 0;
-          bValue = b.lastActivityDate?.toMillis() || 0;
+          aValue = toMillis(a.lastActivityDate) || 0;
+          bValue = toMillis(b.lastActivityDate) || 0;
           break;
         case 'createdAt':
-          aValue = a.createdAt.toMillis();
-          bValue = b.createdAt.toMillis();
+          aValue = toMillis(a.createdAt);
+          bValue = toMillis(b.createdAt);
           break;
         case 'accountName':
           aValue = getAccountName(a.accountId).toLowerCase();
@@ -270,7 +329,7 @@ export const Opportunities: React.FC = () => {
         'Region': opportunity.region,
         'Deal Value': opportunity.estimatedDealValue || 0,
         'Expected Close Date': opportunity.expectedCloseDate 
-          ? format(opportunity.expectedCloseDate.toDate(), 'yyyy-MM-dd') 
+          ? format(toDate(opportunity.expectedCloseDate), 'yyyy-MM-dd') 
           : '',
         'Is Overdue': isOverdue ? 'Yes' : 'No',
         'Commercial Model': opportunity.commercialModel || '',
@@ -282,12 +341,12 @@ export const Opportunities: React.FC = () => {
         'Scheduled Activities': activitySummary.scheduled,
         'Completed Activities': activitySummary.completed,
         'Next Activity Date': nextScheduled 
-          ? format(nextScheduled.dateTime.toDate(), 'yyyy-MM-dd HH:mm') 
+          ? format(toDate(nextScheduled.dateTime), 'yyyy-MM-dd HH:mm') 
           : '',
         'Next Activity Subject': nextScheduled?.subject || '',
         'Next Activity Type': nextScheduled?.activityType || '',
         'Last Activity Date': lastCompleted 
-          ? format(lastCompleted.dateTime.toDate(), 'yyyy-MM-dd HH:mm') 
+          ? format(toDate(lastCompleted.dateTime), 'yyyy-MM-dd HH:mm') 
           : '',
         'Last Activity Subject': lastCompleted?.subject || '',
         'Last Activity Type': lastCompleted?.activityType || '',
@@ -297,9 +356,9 @@ export const Opportunities: React.FC = () => {
         'Primary Contact Position': opportunityContacts[0]?.position || '',
         'All Contacts': opportunityContacts.map(c => c.name).join(', '),
         'Tags': opportunity.tags.join(', '),
-        'Created Date': format(opportunity.createdAt.toDate(), 'yyyy-MM-dd'),
+        'Created Date': format(toDate(opportunity.createdAt), 'yyyy-MM-dd'),
         'Last Updated': opportunity.updatedAt 
-          ? format(opportunity.updatedAt.toDate(), 'yyyy-MM-dd') 
+          ? format(toDate(opportunity.updatedAt), 'yyyy-MM-dd') 
           : ''
       };
     });
@@ -347,7 +406,7 @@ export const Opportunities: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Opportunities</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {filteredAndSortedOpportunities.length} of {opportunities.length} opportunities
+              {filteredAndSortedOpportunities.length} of {opportunities?.length || 0} opportunities
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -627,16 +686,16 @@ export const Opportunities: React.FC = () => {
                                   const nextScheduled = getNextScheduledActivity(opportunity);
                                   
                                   if (nextScheduled) {
-                                    const isToday = format(nextScheduled.dateTime.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-                                    const isOverdue = isBefore(nextScheduled.dateTime.toDate(), new Date());
+                                                    const isToday = format(toDate(nextScheduled.dateTime), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                const isOverdue = isBefore(toDate(nextScheduled.dateTime), new Date());
                                     
                                     return (
                                       <div className="flex items-center gap-2">
                                         <Clock className={`h-4 w-4 ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`} />
                                         <div>
-                                          <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-gray-900'}`}>
-                                            {format(nextScheduled.dateTime.toDate(), 'MMM d, h:mm a')}
-                                          </div>
+                                                                    <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-gray-900'}`}>
+                            {format(toDate(nextScheduled.dateTime), 'MMM d, h:mm a')}
+                          </div>
                                           <div className="text-xs text-gray-500 truncate max-w-32">
                                             {nextScheduled.subject}
                                           </div>
@@ -667,15 +726,15 @@ export const Opportunities: React.FC = () => {
                                       <div className="flex items-center gap-2">
                                         <CheckCircle className="h-4 w-4 text-green-500" />
                                         <div>
-                                          <div className="text-sm text-gray-900">
-                                            {formatDistanceToNow(lastCompleted.dateTime.toDate(), { addSuffix: true })}
-                                          </div>
-                                          <div className="text-xs text-gray-500 truncate max-w-32">
-                                            {lastCompleted.subject}
-                                          </div>
-                                          <div className="text-xs text-gray-400">
-                                            {format(lastCompleted.dateTime.toDate(), 'MMM d')}
-                                          </div>
+                                                                                  <div className="text-sm text-gray-900">
+                                          {formatDistanceToNow(toDate(lastCompleted.dateTime), { addSuffix: true })}
+                                        </div>
+                                        <div className="text-xs text-gray-500 truncate max-w-32">
+                                          {lastCompleted.subject}
+                                        </div>
+                                        <div className="text-xs text-gray-400">
+                                          {format(toDate(lastCompleted.dateTime), 'MMM d')}
+                                        </div>
                                         </div>
                                       </div>
                                     );
@@ -714,7 +773,7 @@ export const Opportunities: React.FC = () => {
                                     <Calendar className={`h-4 w-4 mr-2 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} />
                                     <div>
                                       <div className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                                        {format(opportunity.expectedCloseDate.toDate(), 'MMM d, yyyy')}
+                                        {format(toDate(opportunity.expectedCloseDate), 'MMM d, yyyy')}
                                       </div>
                                       {isOverdue && (
                                         <div className="flex items-center gap-1 text-xs text-red-600">

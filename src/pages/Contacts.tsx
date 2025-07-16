@@ -25,15 +25,62 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Contact, ContactType, Account, Product, Opportunity, Activity as ActivityType } from '../types';
+import { useContactsApi } from '../hooks/useContactsApi';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
 type SortField = 'name' | 'email' | 'position' | 'contactType' | 'lastContactDate' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
+// Helper function to convert various date formats to Date object
+const toDate = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    // Check if it's a valid date
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    const date = dateValue.toDate();
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // If it's a string or number, parse it
+  const parsedDate = new Date(dateValue);
+  return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+};
+
+// Helper function to get milliseconds from various date formats
+const toMillis = (dateValue: any): number => {
+  if (!dateValue) return 0;
+  
+  // If it has a toMillis method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toMillis === 'function') {
+    return dateValue.toMillis();
+  }
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? 0 : dateValue.getTime();
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    const date = dateValue.toDate();
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  
+  // If it's a string or number, parse it
+  const parsedDate = new Date(dateValue);
+  return isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
+};
+
 export const Contacts: React.FC = () => {
   const navigate = useNavigate();
-  const [contacts, setContacts] = useState<Contact[]>([]);
+  const { contacts, loading: contactsLoading, error: contactsError } = useContactsApi();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -45,27 +92,39 @@ export const Contacts: React.FC = () => {
   const [accountFilter, setAccountFilter] = useState<string>('All');
 
   useEffect(() => {
-    fetchData();
+    fetchRelatedData();
   }, []);
 
-  const fetchData = async () => {
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!contactsLoading && accounts.length > 0 && products.length > 0 && opportunities.length > 0) {
+      setLoading(false);
+    } else if (!contactsLoading && contacts && contacts.length === 0) {
+      // Handle case where contacts is empty but other data might be loading
+      setLoading(false);
+    }
+  }, [contactsLoading, contacts, accounts, products, opportunities]);
+
+  const fetchRelatedData = async () => {
     try {
-      const [contactsData, accountsData, productsData, opportunitiesData] = await Promise.all([
-        getDocuments('contacts'),
+      const [accountsData, productsData, opportunitiesData] = await Promise.all([
         getDocuments('accounts'),
         getDocuments('products'),
         getDocuments('opportunities')
       ]);
-      setContacts(contactsData as Contact[]);
       setAccounts(accountsData as Account[]);
       setProducts(productsData as Product[]);
       setOpportunities(opportunitiesData as Opportunity[]);
     } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
+      console.error('Error fetching related data:', error);
       setLoading(false);
     }
   };
+
+  // Show error if contacts failed to load
+  if (contactsError) {
+    console.error('Error loading contacts:', contactsError);
+  }
 
   const getAccountName = (accountId: string) => {
     const account = accounts.find(a => a.id === accountId);
@@ -100,7 +159,7 @@ export const Contacts: React.FC = () => {
         opportunity.activities.forEach(activity => {
           // Only consider completed activities for "last contact"
           if (activity.relatedContactIds.includes(contact.id || '') && activity.status === 'Completed') {
-            const activityDate = activity.completedAt?.toDate() || activity.dateTime.toDate();
+            const activityDate = activity.completedAt ? toDate(activity.completedAt) : toDate(activity.dateTime);
             if (!mostRecentDate || activityDate > mostRecentDate) {
               mostRecentDate = activityDate;
               mostRecentActivity = {
@@ -132,7 +191,7 @@ export const Contacts: React.FC = () => {
   const isContactOverdue = (contact: Contact) => {
     if (!contact.lastContactDate) return false;
     const daysSinceLastContact = Math.floor(
-      (new Date().getTime() - contact.lastContactDate.toDate().getTime()) / (1000 * 60 * 60 * 24)
+      (new Date().getTime() - toDate(contact.lastContactDate).getTime()) / (1000 * 60 * 60 * 24)
     );
     return daysSinceLastContact > 30; // Consider overdue if no contact in 30 days
   };
@@ -166,7 +225,7 @@ export const Contacts: React.FC = () => {
     return colors[contactType];
   };
 
-  const filteredAndSortedContacts = contacts
+  const filteredAndSortedContacts = (contacts || [])
     .filter(contact => {
       const account = getAccount(contact.accountId);
       const matchesSearch = (
@@ -203,12 +262,12 @@ export const Contacts: React.FC = () => {
           bValue = b.contactType;
           break;
         case 'lastContactDate':
-          aValue = a.lastContactDate?.toMillis() || 0;
-          bValue = b.lastContactDate?.toMillis() || 0;
+          aValue = toMillis(a.lastContactDate) || 0;
+          bValue = toMillis(b.lastContactDate) || 0;
           break;
         case 'createdAt':
-          aValue = a.createdAt.toMillis();
-          bValue = b.createdAt.toMillis();
+          aValue = toMillis(a.createdAt);
+          bValue = toMillis(b.createdAt);
           break;
         default:
           return 0;
@@ -236,7 +295,7 @@ export const Contacts: React.FC = () => {
 
   const CONTACT_TYPES: ContactType[] = ['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other'];
 
-  const uniqueAccounts = Array.from(new Set(contacts.map(c => c.accountId)))
+  const uniqueAccounts = Array.from(new Set((contacts || []).map(c => c.accountId)))
     .map(accountId => accounts.find(a => a.id === accountId))
     .filter(Boolean) as Account[];
 
@@ -269,12 +328,12 @@ export const Contacts: React.FC = () => {
           'Preferred Contact Method': contact.preferredContactMethod || '',
           'LinkedIn': contact.linkedIn || '',
           'Timezone': contact.timezone || '',
-          'Last Contact Date': contact.lastContactDate 
-            ? format(contact.lastContactDate.toDate(), 'yyyy-MM-dd') 
-            : '',
-          'Days Since Last Contact': contact.lastContactDate 
-            ? Math.floor((new Date().getTime() - contact.lastContactDate.toDate().getTime()) / (1000 * 60 * 60 * 24))
-            : '',
+                  'Last Contact Date': contact.lastContactDate 
+          ? format(toDate(contact.lastContactDate), 'yyyy-MM-dd') 
+          : '',
+        'Days Since Last Contact': contact.lastContactDate 
+          ? Math.floor((new Date().getTime() - toDate(contact.lastContactDate).getTime()) / (1000 * 60 * 60 * 24))
+          : '',
           'Is Overdue': isOverdue ? 'Yes' : 'No',
           'Product Count': contactProducts.length,
           'Products': contactProducts.map(p => p.name).join(', '),
@@ -282,10 +341,10 @@ export const Contacts: React.FC = () => {
           'Total Opportunities': contactOpportunities.length,
           'Opportunity Titles': contactOpportunities.map(opp => opp.title).join(', '),
           'Notes': contact.notes || '',
-          'Created Date': format(contact.createdAt.toDate(), 'yyyy-MM-dd'),
-          'Last Updated': contact.updatedAt 
-            ? format(contact.updatedAt.toDate(), 'yyyy-MM-dd') 
-            : ''
+                  'Created Date': format(toDate(contact.createdAt), 'yyyy-MM-dd'),
+        'Last Updated': contact.updatedAt 
+          ? format(toDate(contact.updatedAt), 'yyyy-MM-dd') 
+          : ''
         };
       });
 
@@ -332,7 +391,7 @@ export const Contacts: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Contacts</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {filteredAndSortedContacts.length} of {contacts.length} contacts
+              {filteredAndSortedContacts.length} of {contacts?.length || 0} contacts
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -630,8 +689,8 @@ export const Contacts: React.FC = () => {
                               
                               // Use completed activity date or fallback to lastContactDate
                               const displayDate = recentActivity ? 
-                                (recentActivity.completedAt?.toDate() || recentActivity.dateTime.toDate()) : 
-                                contact.lastContactDate?.toDate();
+                                (recentActivity.completedAt ? toDate(recentActivity.completedAt) : toDate(recentActivity.dateTime)) : 
+                                contact.lastContactDate ? toDate(contact.lastContactDate) : null;
                               
                               if (displayDate) {
                                 return (

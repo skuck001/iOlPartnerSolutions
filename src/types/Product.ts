@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export type ProductCategory = 
   | 'Business Intelligence' 
   | 'Revenue Management' 
@@ -25,6 +23,12 @@ export type ProductSubcategory =
   | 'Data Connectivity'
   | 'Other';
 
+// Firebase Timestamp-like interface
+interface FirebaseTimestamp {
+  toDate(): Date;
+  toMillis(): number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -40,7 +44,7 @@ export interface Product {
   targetMarket?: string;
   pricing?: string;
   notes?: string;
-  ownerId: string; // User ID of the product owner
-  createdAt: Timestamp;
-  updatedAt?: Timestamp;
-} 
+  ownerId: string;
+  createdAt: FirebaseTimestamp;
+  updatedAt?: FirebaseTimestamp;
+}

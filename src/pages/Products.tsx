@@ -28,15 +28,62 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Product, ProductCategory, ProductSubcategory, Account, Contact, Opportunity } from '../types';
+import { useProductsApi } from '../hooks/useProductsApi';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
 type SortField = 'name' | 'category' | 'subcategory' | 'status' | 'version' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
+// Helper function to convert various date formats to Date object
+const toDate = (dateValue: any): Date => {
+  if (!dateValue) return new Date();
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    // Check if it's a valid date
+    return isNaN(dateValue.getTime()) ? new Date() : dateValue;
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    const date = dateValue.toDate();
+    return isNaN(date.getTime()) ? new Date() : date;
+  }
+  
+  // If it's a string or number, parse it
+  const parsedDate = new Date(dateValue);
+  return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+};
+
+// Helper function to get milliseconds from various date formats
+const toMillis = (dateValue: any): number => {
+  if (!dateValue) return 0;
+  
+  // If it has a toMillis method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toMillis === 'function') {
+    return dateValue.toMillis();
+  }
+  
+  // If it's already a Date object
+  if (dateValue instanceof Date) {
+    return isNaN(dateValue.getTime()) ? 0 : dateValue.getTime();
+  }
+  
+  // If it has a toDate method (Firebase Timestamp)
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    const date = dateValue.toDate();
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+  
+  // If it's a string or number, parse it
+  const parsedDate = new Date(dateValue);
+  return isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime();
+};
+
 export const Products: React.FC = () => {
   const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>([]);
+  const { products, loading: productsLoading, error: productsError } = useProductsApi();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -49,27 +96,39 @@ export const Products: React.FC = () => {
   const [accountFilter, setAccountFilter] = useState<string>('All');
 
   useEffect(() => {
-    fetchData();
+    fetchRelatedData();
   }, []);
 
-  const fetchData = async () => {
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!productsLoading && accounts.length > 0 && contacts.length > 0 && opportunities.length > 0) {
+      setLoading(false);
+    } else if (!productsLoading && products && products.length === 0) {
+      // Handle case where products is empty but other data might be loading
+      setLoading(false);
+    }
+  }, [productsLoading, products, accounts, contacts, opportunities]);
+
+  const fetchRelatedData = async () => {
     try {
-      const [productsData, accountsData, contactsData, opportunitiesData] = await Promise.all([
-        getDocuments('products'),
+      const [accountsData, contactsData, opportunitiesData] = await Promise.all([
         getDocuments('accounts'),
         getDocuments('contacts'),
         getDocuments('opportunities')
       ]);
-      setProducts(productsData as Product[]);
       setAccounts(accountsData as Account[]);
       setContacts(contactsData as Contact[]);
       setOpportunities(opportunitiesData as Opportunity[]);
     } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
+      console.error('Error fetching related data:', error);
       setLoading(false);
     }
   };
+
+  // Show error if products failed to load
+  if (productsError) {
+    console.error('Error loading products:', productsError);
+  }
 
   const getAccount = (accountId: string) => {
     return accounts.find(a => a.id === accountId);
@@ -165,7 +224,7 @@ export const Products: React.FC = () => {
 
 
 
-  const filteredAndSortedProducts = products
+  const filteredAndSortedProducts = (products || [])
     .filter(product => {
       const account = getAccount(product.accountId);
       const matchesSearch = (
@@ -209,8 +268,8 @@ export const Products: React.FC = () => {
           bValue = b.version || '';
           break;
         case 'createdAt':
-          aValue = a.createdAt.toMillis();
-          bValue = b.createdAt.toMillis();
+          aValue = toMillis(a.createdAt);
+          bValue = toMillis(b.createdAt);
           break;
         default:
           return 0;
@@ -240,7 +299,7 @@ export const Products: React.FC = () => {
   
   const STATUSES = ['Active', 'Deprecated', 'Development', 'Beta'];
 
-  const uniqueAccounts = Array.from(new Set(products.map(p => p.accountId)))
+  const uniqueAccounts = Array.from(new Set((products || []).map(p => p.accountId)))
     .map(accountId => accounts.find(a => a.id === accountId))
     .filter(Boolean) as Account[];
 
@@ -287,9 +346,9 @@ export const Products: React.FC = () => {
           'Opportunity Titles': productOpportunities.map(opp => opp.title).join(', '),
           'Tags': (product.tags || []).join(', '),
           'Notes': product.notes || '',
-          'Created Date': format(product.createdAt.toDate(), 'yyyy-MM-dd'),
+          'Created Date': format(toDate(product.createdAt), 'yyyy-MM-dd'),
           'Last Updated': product.updatedAt 
-            ? format(product.updatedAt.toDate(), 'yyyy-MM-dd') 
+            ? format(toDate(product.updatedAt), 'yyyy-MM-dd') 
             : ''
         };
       });
@@ -337,7 +396,7 @@ export const Products: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Products</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {filteredAndSortedProducts.length} of {products.length} products
+              {filteredAndSortedProducts.length} of {products?.length || 0} products
             </p>
           </div>
           <div className="flex items-center gap-3">

@@ -26,19 +26,30 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Account, Contact, Product, Opportunity } from '../types';
-import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 import { getUserDisplayName, getUserById } from '../lib/userUtils';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useProductsApi } from '../hooks/useProductsApi';
+import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 
 type SortField = 'name' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
 export const Accounts: React.FC = () => {
   const navigate = useNavigate();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const {
+    accounts,
+    loading: accountsLoading,
+    error,
+    fetchAccounts,
+    clearError
+  } = useAccountsApi();
+  
+  const { contacts, loading: contactsLoading } = useContactsApi();
+  const { products, loading: productsLoading } = useProductsApi();
+  const { opportunities, loading: opportunitiesLoading } = useOpportunitiesApi();
+  
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
@@ -47,7 +58,7 @@ export const Accounts: React.FC = () => {
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    fetchData();
+    fetchAccountsData();
   }, []);
 
   useEffect(() => {
@@ -66,40 +77,39 @@ export const Accounts: React.FC = () => {
       setOwnerNames(names);
     };
 
-    if (accounts.length > 0) {
+    if (accounts && accounts.length > 0) {
       fetchOwnerNames();
     }
   }, [accounts]);
 
-  const fetchData = async () => {
-    try {
-      const [accountsData, contactsData, productsData, opportunitiesData] = await Promise.all([
-        getDocuments('accounts'),
-        getDocuments('contacts'),
-        getDocuments('products'),
-        getDocuments('opportunities')
-      ]);
-      setAccounts(accountsData as Account[]);
-      setContacts(contactsData as Contact[]);
-      setProducts(productsData as Product[]);
-      setOpportunities(opportunitiesData as Opportunity[]);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
+  // Update loading state when all data is loaded
+  useEffect(() => {
+    if (!accountsLoading && !contactsLoading && !productsLoading && !opportunitiesLoading) {
       setLoading(false);
+    }
+  }, [accountsLoading, contactsLoading, productsLoading, opportunitiesLoading]);
+
+  const fetchAccountsData = async () => {
+    try {
+      // Fetch accounts via Cloud Functions
+      await fetchAccounts({
+        limit: 50
+      });
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
     }
   };
 
   const getContactsForAccount = (account: Account) => {
-    return contacts.filter(c => c.accountId === account.id);
+    return (contacts || []).filter(c => c.accountId === account.id);
   };
 
   const getProductsForAccount = (account: Account) => {
-    return products.filter(p => p.accountId === account.id);
+    return (products || []).filter(p => p.accountId === account.id);
   };
 
   const getOpportunitiesForAccount = (account: Account) => {
-    return opportunities.filter(opp => opp.accountId === account.id);
+    return (opportunities || []).filter(opp => opp.accountId === account.id);
   };
 
   const getActiveOpportunitiesCount = (account: Account) => {
@@ -145,9 +155,7 @@ export const Accounts: React.FC = () => {
     navigate('/accounts/new');
   };
 
-
-
-  const filteredAndSortedAccounts = accounts
+  const filteredAndSortedAccounts = (accounts || [])
     .filter(account => {
       const matchesSearch = (
         account.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -167,8 +175,8 @@ export const Accounts: React.FC = () => {
           bValue = b.name.toLowerCase();
           break;
         case 'createdAt':
-          aValue = a.createdAt.toMillis();
-          bValue = b.createdAt.toMillis();
+          aValue = a.createdAt?.seconds || 0;
+          bValue = b.createdAt?.seconds || 0;
           break;
         default:
           return 0;
@@ -193,8 +201,6 @@ export const Accounts: React.FC = () => {
     }
     return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-0 group-hover:opacity-50" />;
   };
-
-
 
   const handleExportToExcel = () => {
     try {
@@ -236,9 +242,9 @@ export const Accounts: React.FC = () => {
           'Opportunity Titles': accountOpportunities.map(opp => opp.title).join(', '),
           'Tags': (account.tags || []).join(', '),
           'Notes': account.notes || '',
-          'Created Date': format(account.createdAt.toDate(), 'yyyy-MM-dd'),
-          'Last Updated': account.updatedAt 
-            ? format(account.updatedAt.toDate(), 'yyyy-MM-dd') 
+          'Created Date': account.createdAt?.seconds ? format(new Date(account.createdAt.seconds * 1000), 'yyyy-MM-dd') : '',
+          'Last Updated': account.updatedAt?.seconds 
+            ? format(new Date(account.updatedAt.seconds * 1000), 'yyyy-MM-dd') 
             : ''
         };
       });
@@ -280,13 +286,33 @@ export const Accounts: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mx-6 mt-6">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">
+                Error loading accounts
+              </h3>
+              <div className="mt-2 text-sm text-red-700">
+                {error.message}
+              </div>
+              {error.details && (
+                <div className="mt-2 text-xs text-red-600">
+                  Code: {error.code}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Accounts</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {filteredAndSortedAccounts.length} of {accounts.length} accounts
+              {filteredAndSortedAccounts.length} of {accounts?.length || 0} accounts
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -323,14 +349,12 @@ export const Accounts: React.FC = () => {
               className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-sm"
             />
           </div>
-          
-
         </div>
       </div>
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
-        {loading ? (
+        {loading || accountsLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
@@ -442,8 +466,6 @@ export const Accounts: React.FC = () => {
                             </div>
                           </div>
                         </td>
-
-
 
                         {/* Contacts */}
                         <td className="px-6 py-4">

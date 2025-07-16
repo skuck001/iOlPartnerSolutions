@@ -1,33 +1,57 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow authenticated users to read all users (for dropdowns, etc.)
-    // but only update their own user document
+    // Users can only read and write their own user document
+    // This is the only direct access allowed for user profile management
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Allow authenticated users to read and write all other collections
-    // You may want to make these more restrictive based on your needs
+    // All business data access must go through Cloud Functions for security
+    // These rules block all direct client access to business collections
+    
     match /accounts/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false; // Block all direct access - use Cloud Functions
     }
     
     match /contacts/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false; // Block all direct access - use Cloud Functions
     }
     
     match /products/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false; // Block all direct access - use Cloud Functions
     }
     
     match /opportunities/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false; // Block all direct access - use Cloud Functions
     }
     
     match /tasks/{document} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false; // Block all direct access - use Cloud Functions
+    }
+    
+    // Audit logs - read access for users to see their own actions, no write access (Cloud Functions only)
+    match /audit_logs/{document} {
+      allow read: if request.auth != null 
+        && request.auth.uid == resource.data.userId;
+      allow write: if false; // Only Cloud Functions can write audit logs
+    }
+    
+    // System collections that might be needed for app functionality
+    // Add specific rules here as needed for things like:
+    // - Configuration data
+    // - Public reference data
+    // - Cached computed values
+    
+    // Example: Public reference data (uncomment and modify as needed)
+    // match /public_data/{document} {
+    //   allow read: if request.auth != null;
+    //   allow write: if false; // Only Cloud Functions can write
+    // }
+    
+    // Fallback rule: deny everything else
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 } 

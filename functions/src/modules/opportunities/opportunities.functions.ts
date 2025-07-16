@@ -1,0 +1,325 @@
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { getFirestore } from 'firebase-admin/firestore';
+import { validateData } from '../../shared/validation.middleware';
+import { authenticateUser } from '../../shared/auth.middleware';
+import { OpportunitiesService, OpportunityFilters, OpportunitiesQueryOptions } from './opportunities.service';
+import { z } from 'zod';
+
+const db = getFirestore();
+const opportunitiesService = new OpportunitiesService(db);
+
+// Validation schemas
+const OpportunityFiltersSchema = z.object({
+  ownerId: z.string().optional(),
+  accountId: z.string().optional(),
+  productId: z.string().optional(),
+  stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']).optional(),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  search: z.string().optional(),
+  region: z.string().optional(),
+  contactId: z.string().optional(),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  closeDateStart: z.date().optional(),
+  closeDateEnd: z.date().optional()
+});
+
+const OpportunitiesQuerySchema = z.object({
+  filters: OpportunityFiltersSchema.optional(),
+  sortBy: z.enum(['title', 'stage', 'priority', 'estimatedDealValue', 'expectedCloseDate', 'lastActivityDate', 'createdAt', 'updatedAt']).optional(),
+  sortOrder: z.enum(['asc', 'desc']).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).optional()
+});
+
+const CreateOpportunitySchema = z.object({
+  title: z.string().min(1),
+  accountId: z.string().min(1),
+  stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  description: z.string().optional(),
+  estimatedDealValue: z.number().optional(),
+  probability: z.number().min(0).max(100).optional(),
+  expectedCloseDate: z.any().optional(), // Timestamp
+  lastActivityDate: z.any().optional(), // Timestamp
+  productId: z.string().optional(),
+  contactIds: z.array(z.string()),
+  region: z.string().optional(),
+  notes: z.array(z.any()).optional(),
+  activities: z.array(z.any()).optional(),
+  documents: z.array(z.any()).optional(),
+  tags: z.array(z.string()).optional()
+});
+
+const UpdateOpportunitySchema = z.object({
+  title: z.string().min(1).optional(),
+  stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']).optional(),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  description: z.string().nullish().transform(val => val ?? undefined),
+  estimatedDealValue: z.number().nullish().transform(val => val ?? undefined),
+  probability: z.number().min(0).max(100).optional(),
+  expectedCloseDate: z.any().optional(), // Timestamp
+  lastActivityDate: z.any().optional(), // Timestamp
+  productId: z.string().nullish().transform(val => val ?? undefined),
+  contactIds: z.array(z.string()).optional(),
+  region: z.string().nullish().transform(val => val ?? undefined),
+  notes: z.array(z.any()).optional(),
+  activities: z.array(z.any()).optional(),
+  documents: z.array(z.any()).optional(),
+  tags: z.array(z.string()).optional(),
+  ownerId: z.string().optional()
+});
+
+const BulkUpdateOpportunitiesSchema = z.object({
+  updates: z.array(z.object({
+    id: z.string().min(1),
+    data: UpdateOpportunitySchema
+  })).min(1).max(50)
+});
+
+// Get opportunities with filtering and pagination
+export const getOpportunities = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      const validatedData = validateData(OpportunitiesQuerySchema, request.data);
+
+      const options: OpportunitiesQueryOptions = {
+        ...validatedData,
+        filters: {
+          ...validatedData.filters,
+          ownerId: user.uid // Always filter by current user
+        }
+      };
+
+      const result = await opportunitiesService.getOpportunities(options);
+      
+      return {
+        success: true,
+        data: result,
+        resultCount: result.opportunities.length
+      };
+    } catch (error) {
+      console.error('Error in getOpportunities:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError('internal', 'Failed to get opportunities');
+    }
+  }
+);
+
+// Get single opportunity
+export const getOpportunity = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      if (!request.data?.opportunityId) {
+        throw new HttpsError('invalid-argument', 'Opportunity ID is required');
+      }
+
+      const opportunity = await opportunitiesService.getOpportunity(request.data.opportunityId);
+      
+      if (!opportunity) {
+        throw new HttpsError('not-found', 'Opportunity not found');
+      }
+
+      // Check ownership
+      if (opportunity.ownerId !== user.uid) {
+        throw new HttpsError('permission-denied', 'Access denied');
+      }
+
+      return {
+        success: true,
+        data: opportunity
+      };
+    } catch (error) {
+      console.error('Error in getOpportunity:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError('internal', 'Failed to get opportunity');
+    }
+  }
+);
+
+// Create new opportunity
+export const createOpportunity = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      const validatedData = validateData(CreateOpportunitySchema, request.data);
+
+      const newOpportunity = await opportunitiesService.createOpportunity(validatedData, user.uid);
+
+      return {
+        success: true,
+        data: newOpportunity
+      };
+    } catch (error) {
+      console.error('Error in createOpportunity:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        throw new HttpsError('invalid-argument', error.message);
+      }
+      throw new HttpsError('internal', 'Failed to create opportunity');
+    }
+  }
+);
+
+// Update opportunity
+export const updateOpportunity = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      if (!request.data?.opportunityId) {
+        throw new HttpsError('invalid-argument', 'Opportunity ID is required');
+      }
+
+      const validatedData = validateData(UpdateOpportunitySchema, request.data.updates);
+
+      // Check if opportunity exists and user owns it
+      const existingOpportunity = await opportunitiesService.getOpportunity(request.data.opportunityId);
+      if (!existingOpportunity) {
+        throw new HttpsError('not-found', 'Opportunity not found');
+      }
+      if (existingOpportunity.ownerId !== user.uid) {
+        throw new HttpsError('permission-denied', 'Access denied');
+      }
+
+      const updatedOpportunity = await opportunitiesService.updateOpportunity(
+        request.data.opportunityId,
+        validatedData,
+        user.uid
+      );
+
+      return {
+        success: true,
+        data: updatedOpportunity
+      };
+    } catch (error) {
+      console.error('Error in updateOpportunity:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        throw new HttpsError('invalid-argument', error.message);
+      }
+      throw new HttpsError('internal', 'Failed to update opportunity');
+    }
+  }
+);
+
+// Delete opportunity
+export const deleteOpportunity = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      if (!request.data?.opportunityId) {
+        throw new HttpsError('invalid-argument', 'Opportunity ID is required');
+      }
+
+      // Check if opportunity exists and user owns it
+      const existingOpportunity = await opportunitiesService.getOpportunity(request.data.opportunityId);
+      if (!existingOpportunity) {
+        throw new HttpsError('not-found', 'Opportunity not found');
+      }
+      if (existingOpportunity.ownerId !== user.uid) {
+        throw new HttpsError('permission-denied', 'Access denied');
+      }
+
+      await opportunitiesService.deleteOpportunity(request.data.opportunityId, user.uid);
+
+      return {
+        success: true,
+        message: 'Opportunity deleted successfully'
+      };
+    } catch (error) {
+      console.error('Error in deleteOpportunity:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        throw new HttpsError('invalid-argument', error.message);
+      }
+      throw new HttpsError('internal', 'Failed to delete opportunity');
+    }
+  }
+);
+
+// Get opportunities statistics
+export const getOpportunitiesStats = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      const validatedData = validateData(OpportunityFiltersSchema, request.data || {});
+
+      const filters: OpportunityFilters = {
+        ...validatedData,
+        ownerId: user.uid // Always filter by current user
+      };
+
+      const stats = await opportunitiesService.getOpportunitiesStats(filters);
+
+      return {
+        success: true,
+        data: stats
+      };
+    } catch (error) {
+      console.error('Error in getOpportunitiesStats:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      throw new HttpsError('internal', 'Failed to get opportunities statistics');
+    }
+  }
+);
+
+// Bulk update opportunities
+export const bulkUpdateOpportunities = onCall(
+  { cors: true },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      const validatedData = validateData(BulkUpdateOpportunitiesSchema, request.data);
+
+      // Verify ownership of all opportunities
+      for (const update of validatedData.updates) {
+        const opportunity = await opportunitiesService.getOpportunity(update.id);
+        if (!opportunity || opportunity.ownerId !== user.uid) {
+          throw new HttpsError('permission-denied', `Access denied for opportunity ${update.id}`);
+        }
+      }
+
+      const updatedOpportunities = await opportunitiesService.bulkUpdateOpportunities(
+        validatedData.updates,
+        user.uid
+      );
+
+      return {
+        success: true,
+        data: updatedOpportunities
+      };
+    } catch (error) {
+      console.error('Error in bulkUpdateOpportunities:', error);
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        throw new HttpsError('invalid-argument', error.message);
+      }
+      throw new HttpsError('internal', 'Failed to bulk update opportunities');
+    }
+  }
+); 
