@@ -38,8 +38,6 @@ interface WeeklySummary {
   activitiesThisWeek: number;
   activitiesNextWeek: number;
   overdueActivities: number;
-  stageDistribution: Record<OpportunityStage, number>;
-  priorityDistribution: Record<OpportunityPriority, number>;
 }
 
 interface OpportunityProgress {
@@ -106,18 +104,7 @@ export const WeeklyReport: React.FC = () => {
 
     const totalDealValue = activeOpps.reduce((sum, opp) => sum + (opp.estimatedDealValue || 0), 0);
 
-    // Stage distribution
-    const stageDistribution = activeOpps.reduce((acc, opp) => {
-      acc[opp.stage] = (acc[opp.stage] || 0) + 1;
-      return acc;
-    }, {} as Record<OpportunityStage, number>);
 
-    // Priority distribution
-    const priorityDistribution = activeOpps.reduce((acc, opp) => {
-      const priority = opp.priority || 'Medium';
-      acc[priority] = (acc[priority] || 0) + 1;
-      return acc;
-    }, {} as Record<OpportunityPriority, number>);
 
     // Analyze activities
     const allActivities: (ActivityType & { opportunity: Opportunity; account: Account })[] = [];
@@ -160,9 +147,7 @@ export const WeeklyReport: React.FC = () => {
       activeOpportunities: activeOpps.length,
       activitiesThisWeek: thisWeekActivities.length,
       activitiesNextWeek: nextWeekActivities.length,
-      overdueActivities: overdueCount,
-      stageDistribution,
-      priorityDistribution
+      overdueActivities: overdueCount
     });
 
     // Analyze opportunity progress
@@ -281,12 +266,7 @@ export const WeeklyReport: React.FC = () => {
       ['Activities This Week', summary?.activitiesThisWeek || 0],
       ['Upcoming Activities', summary?.activitiesNextWeek || 0],
       ['Overdue Activities', summary?.overdueActivities || 0],
-      [''],
-      ['PIPELINE BY STAGE'],
-      ...Object.entries(summary?.stageDistribution || {}).map(([stage, count]) => [stage, count]),
-      [''],
-      ['PRIORITY DISTRIBUTION'],
-      ...Object.entries(summary?.priorityDistribution || {}).map(([priority, count]) => [priority, count])
+
     ];
     
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -404,13 +384,6 @@ export const WeeklyReport: React.FC = () => {
     if ((summary?.overdueActivities || 0) > 0) {
       emailContent += `⚠️ Overdue Activities: ${summary?.overdueActivities}\n`;
     }
-    emailContent += `\n`;
-
-    emailContent += `PIPELINE BY STAGE\n`;
-    emailContent += `================\n`;
-    Object.entries(summary?.stageDistribution || {}).forEach(([stage, count]) => {
-      emailContent += `${stage}: ${count} opportunities\n`;
-    });
     emailContent += `\n`;
 
     emailContent += `KEY OPPORTUNITIES\n`;
@@ -555,43 +528,23 @@ export const WeeklyReport: React.FC = () => {
             )}
           </div>
 
-          {/* Pipeline Distribution */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Pipeline by Stage</h3>
-              <div className="space-y-3">
-                {Object.entries(summary?.stageDistribution || {}).map(([stage, count]) => (
-                  <div key={stage} className="flex items-center justify-between">
-                    <span className={`inline-flex items-center px-2.5 py-1 text-sm font-medium rounded-full ${getStageColor(stage as OpportunityStage)}`}>
-                      {stage}
-                    </span>
-                    <span className="text-lg font-semibold text-gray-900">{count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Priority Distribution</h3>
-              <div className="space-y-3">
-                {Object.entries(summary?.priorityDistribution || {}).map(([priority, count]) => (
-                  <div key={priority} className="flex items-center justify-between">
-                    <span className={`inline-flex items-center px-2.5 py-1 text-sm font-medium rounded-full ${getPriorityColor(priority as OpportunityPriority)}`}>
-                      {priority}
-                    </span>
-                    <span className="text-lg font-semibold text-gray-900">{count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
 
           {/* Opportunity Progress */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Opportunity Progress & Status</h3>
             <div className="space-y-4">
-              {opportunityProgress.slice(0, 15).map((progress) => (
-                <div key={progress.opportunity.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+              {opportunityProgress.slice(0, 15).map((progress) => {
+                const priorityBorderColors = {
+                  'Critical': 'border-l-red-500',
+                  'High': 'border-l-orange-500', 
+                  'Medium': 'border-l-yellow-500',
+                  'Low': 'border-l-green-500'
+                };
+                const borderColor = priorityBorderColors[progress.opportunity.priority || 'Medium'];
+                
+                return (
+                <div key={progress.opportunity.id} className={`border border-gray-200 ${borderColor} border-l-4 rounded-lg p-4 hover:bg-gray-50 transition-colors`}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
@@ -627,60 +580,139 @@ export const WeeklyReport: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Weekly Changes */}
-                      {progress.weeklyChanges.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-sm text-blue-700 font-medium">This Week:</p>
-                          <ul className="text-sm text-blue-600 ml-4">
-                            {progress.weeklyChanges.map((change, idx) => (
-                              <li key={idx}>• {change}</li>
-                            ))}
-                          </ul>
+                      {/* Weekly Status and Risk Factors in one line */}
+                      {(progress.weeklyChanges.length > 0 || progress.riskFactors.length > 0) && (
+                        <div className="mb-3 p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-start justify-between gap-4">
+                            {/* This Week Updates */}
+                            {progress.weeklyChanges.length > 0 && (
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                  <span className="text-sm font-medium text-blue-700">This Week</span>
+                                </div>
+                                <div className="text-sm text-blue-600">
+                                  {progress.weeklyChanges.join(' • ')}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Risk Factors */}
+                            {progress.riskFactors.length > 0 && (
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <AlertTriangle className="w-3 h-3 text-red-500" />
+                                  <span className="text-sm font-medium text-red-700">Risks</span>
+                                </div>
+                                <div className="text-sm text-red-600">
+                                  {progress.riskFactors.join(' • ')}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 
-                      {/* Risk Factors */}
-                      {progress.riskFactors.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-sm text-red-700 font-medium">⚠️ Risk Factors:</p>
-                          <ul className="text-sm text-red-600 ml-4">
-                            {progress.riskFactors.map((risk, idx) => (
-                              <li key={idx}>• {risk}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-
-                      {/* Activity Status */}
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                      {/* Activity Status with Notes */}
+                      <div className="space-y-2">
                         {progress.lastActivity && (
-                          <div className="flex items-center gap-1">
-                            <CheckCircle className="h-3 w-3 text-green-500" />
-                            Last: {progress.lastActivity.subject} ({format(progress.lastActivity.dateTime.toDate(), 'MMM d')})
+                          <div className="flex items-start gap-2 p-2 bg-green-50 rounded-lg">
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-green-700">Last Activity</span>
+                                <span className="text-xs text-green-600">
+                                  {format(progress.lastActivity.dateTime.toDate(), 'MMM d')}
+                                </span>
+                              </div>
+                              <p className="text-sm text-green-800 font-medium">{progress.lastActivity.subject}</p>
+                              {progress.lastActivity.notes && (
+                                <p className="text-sm text-green-600 mt-1 line-clamp-2">{progress.lastActivity.notes}</p>
+                              )}
+                            </div>
                           </div>
                         )}
+                        
                         {progress.nextActivity && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-blue-500" />
-                            Next: {progress.nextActivity.subject} ({format(progress.nextActivity.dateTime.toDate(), 'MMM d')})
+                          <div className="flex items-start gap-2 p-2 bg-blue-50 rounded-lg">
+                            <Clock className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-medium text-blue-700">Next Activity</span>
+                                <span className="text-xs text-blue-600">
+                                  {format(progress.nextActivity.dateTime.toDate(), 'MMM d')}
+                                </span>
+                              </div>
+                              <p className="text-sm text-blue-800 font-medium">{progress.nextActivity.subject}</p>
+                              {progress.nextActivity.notes && (
+                                <p className="text-sm text-blue-600 mt-1 line-clamp-2">{progress.nextActivity.notes}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {!progress.lastActivity && !progress.nextActivity && (
+                          <div className="flex items-center gap-2 p-2 bg-yellow-50 rounded-lg">
+                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                            <span className="text-sm text-yellow-700">No recent or scheduled activities</span>
                           </div>
                         )}
                       </div>
                     </div>
                     
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-gray-900">
-                        ${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}
-                      </p>
-                      {progress.opportunity.expectedCloseDate && (
-                        <p className="text-sm text-gray-500">
-                          Close: {format(progress.opportunity.expectedCloseDate.toDate(), 'MMM yyyy')}
+                    <div className="text-right space-y-2">
+                      <div>
+                        <p className="text-xl font-bold text-gray-900">
+                          ${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}
                         </p>
+                        {progress.opportunity.expectedCloseDate && (
+                          <div className="flex flex-col items-end gap-1">
+                            <p className="text-sm text-gray-500">
+                              Close: {format(progress.opportunity.expectedCloseDate.toDate(), 'MMM yyyy')}
+                            </p>
+                            {(() => {
+                              const closeDate = progress.opportunity.expectedCloseDate.toDate();
+                              const daysUntilClose = Math.ceil((closeDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                              if (daysUntilClose <= 0) {
+                                return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Overdue</span>;
+                              } else if (daysUntilClose <= 30) {
+                                return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">{daysUntilClose} days left</span>;
+                              } else if (daysUntilClose <= 60) {
+                                return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">{Math.ceil(daysUntilClose / 7)} weeks left</span>;
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Days in current stage indicator */}
+                      {(() => {
+                        const lastActivity = progress.lastActivity;
+                        if (lastActivity) {
+                          const daysSinceLastActivity = Math.floor((new Date().getTime() - lastActivity.dateTime.toDate().getTime()) / (1000 * 60 * 60 * 24));
+                          if (daysSinceLastActivity > 7) {
+                            return (
+                              <div className="text-xs text-gray-500">
+                                {daysSinceLastActivity} days since activity
+                              </div>
+                            );
+                          }
+                        }
+                        return null;
+                      })()}
+                      
+                      {/* Commercial model */}
+                      {progress.opportunity.commercialModel && (
+                        <div className="text-xs text-gray-500">
+                          {progress.opportunity.commercialModel}
+                        </div>
                       )}
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

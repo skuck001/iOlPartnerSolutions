@@ -11,7 +11,6 @@ import {
   ChevronDown,
   TrendingUp,
   ClipboardList,
-  BarChart3,
   Settings
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -203,17 +202,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                   <ClipboardList className="h-5 w-5 mr-3" />
                   Weekly Report
                 </NavLink>
-                <NavLink
-                  to="/opportunity-insights"
-                  className={({ isActive }) =>
-                    `sidebar-item ${
-                      isActive ? 'sidebar-item-active-iol' : 'sidebar-item-inactive-iol'
-                    }`
-                  }
-                >
-                  <BarChart3 className="h-5 w-5 mr-3" />
-                  Opportunity Rundown
-                </NavLink>
+
 
               </div>
             </div>

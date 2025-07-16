@@ -15,7 +15,7 @@ import { OpportunityDetails } from './pages/OpportunityDetails';
 import { Tasks } from './pages/Tasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { WeeklyReport } from './pages/WeeklyReport';
-import { OpportunityInsights } from './pages/OpportunityInsights';
+
 import { UserProfile } from './pages/UserProfile';
 
 // Protected Route wrapper
@@ -43,11 +43,7 @@ function AppRoutes() {
           <WeeklyReport />
         </ProtectedRoute>
       } />
-      <Route path="/opportunity-insights" element={
-        <ProtectedRoute>
-          <OpportunityInsights />
-        </ProtectedRoute>
-      } />
+
       <Route path="/accounts" element={
         <ProtectedRoute>
           <Accounts />
