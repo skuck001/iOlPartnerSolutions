@@ -25,7 +25,7 @@ import type { Opportunity, OpportunityStage, OpportunityPriority, Account, Conta
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
-type SortField = 'title' | 'stage' | 'priority' | 'estimatedDealValue' | 'expectedCloseDate' | 'lastActivityDate' | 'createdAt';
+type SortField = 'title' | 'stage' | 'priority' | 'estimatedDealValue' | 'expectedCloseDate' | 'lastActivityDate' | 'createdAt' | 'accountName';
 type SortDirection = 'asc' | 'desc';
 
 export const Opportunities: React.FC = () => {
@@ -36,8 +36,8 @@ export const Opportunities: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortField, setSortField] = useState<SortField>('lastActivityDate');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [sortField, setSortField] = useState<SortField>('accountName');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | 'All'>('All');
   const [priorityFilter, setPriorityFilter] = useState<OpportunityPriority | 'All'>('All');
 
@@ -97,7 +97,7 @@ export const Opportunities: React.FC = () => {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('desc');
+      setSortDirection(field === 'accountName' ? 'asc' : 'desc');
     }
   };
 
@@ -202,6 +202,10 @@ export const Opportunities: React.FC = () => {
           aValue = a.createdAt.toMillis();
           bValue = b.createdAt.toMillis();
           break;
+        case 'accountName':
+          aValue = getAccountName(a.accountId).toLowerCase();
+          bValue = getAccountName(b.accountId).toLowerCase();
+          break;
         default:
           return 0;
       }
@@ -212,6 +216,16 @@ export const Opportunities: React.FC = () => {
         return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
       }
     });
+
+  // Group opportunities by account
+  const groupedOpportunities = filteredAndSortedOpportunities.reduce((groups, opportunity) => {
+    const accountName = getAccountName(opportunity.accountId);
+    if (!groups[accountName]) {
+      groups[accountName] = [];
+    }
+    groups[accountName].push(opportunity);
+    return groups;
+  }, {} as Record<string, Opportunity[]>);
 
   const getSortIcon = (field: SortField) => {
     if (sortField === field) {
@@ -295,7 +309,7 @@ export const Opportunities: React.FC = () => {
     const worksheet = XLSX.utils.json_to_sheet(exportData);
 
     // Auto-size columns
-    const columnWidths = [];
+          const columnWidths: Array<{wch: number}> = [];
     const headers = Object.keys(exportData[0] || {});
     
     headers.forEach((header, index) => {
@@ -430,6 +444,15 @@ export const Opportunities: React.FC = () => {
                   <tr>
                     <th 
                       className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      onClick={() => handleSort('accountName')}
+                    >
+                      <div className="flex items-center">
+                        Account & Product
+                        {getSortIcon('accountName')}
+                      </div>
+                    </th>
+                    <th 
+                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('title')}
                     >
                       <div className="flex items-center">
@@ -438,7 +461,7 @@ export const Opportunities: React.FC = () => {
                       </div>
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Account & Product
+                      iOL Products
                     </th>
                     <th 
                       className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
@@ -448,6 +471,12 @@ export const Opportunities: React.FC = () => {
                         Stage & Progress
                         {getSortIcon('stage')}
                       </div>
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Next Activity
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Last Activity
                     </th>
                     <th 
                       className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
@@ -477,19 +506,7 @@ export const Opportunities: React.FC = () => {
                       </div>
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Activities
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contacts
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      iOL Products
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Next Activity
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Last Activity
                     </th>
                     <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -497,282 +514,268 @@ export const Opportunities: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredAndSortedOpportunities.map((opportunity) => {
-                    const account = accounts.find(a => a.id === opportunity.accountId);
-                    const product = opportunity.productId ? products.find(p => p.id === opportunity.productId) : null;
-                    const opportunityContacts = getContactsForOpportunity(opportunity);
-                    const activitySummary = getActivitySummary(opportunity);
-                    const isOverdue = isOpportunityOverdue(opportunity);
-                    const progress = getStageProgress(opportunity.stage);
-                    
-                    return (
-                      <tr
-                        key={opportunity.id}
-                        onClick={() => handleRowClick(opportunity)}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      >
-                        {/* Opportunity Title */}
-                        <td className="px-6 py-4">
-                          <div className="max-w-48">
-                            <div className="text-sm font-medium text-gray-900 leading-tight line-clamp-2">
-                              {opportunity.title}
-                            </div>
-                            <div className="flex items-center gap-1 mt-2">
-                              <MapPin className="h-3 w-3 text-gray-400" />
-                              <span className="text-xs text-gray-500">{opportunity.region}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Account & Product */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-start">
-                            <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium text-gray-900 truncate">
-                                {account?.name || 'Unknown Account'}
-                              </div>
-                              <div className="text-xs text-gray-500 truncate">
-                                {account?.industry}
-                              </div>
-                              {opportunity.productId && getProductName(opportunity.productId) && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  <Package className="h-3 w-3 text-blue-500" />
-                                  <span className="text-xs text-blue-700 font-medium truncate">
-                                    {getProductName(opportunity.productId)}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Stage & Progress */}
-                        <td className="px-6 py-4">
-                          <div className="space-y-2">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(opportunity.stage)}`}>
-                              {opportunity.stage}
-                            </span>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5">
-                              <div 
-                                className={`h-1.5 rounded-full transition-all duration-300 ${
-                                  opportunity.stage === 'Closed-Won' ? 'bg-green-500' : 
-                                  opportunity.stage === 'Closed-Lost' ? 'bg-red-500' : 
-                                  'bg-blue-500'
-                                }`}
-                                style={{ width: `${progress}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Priority */}
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(opportunity.priority)}`}>
-                            {opportunity.priority}
-                          </span>
-                        </td>
-
-                        {/* Deal Value */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 text-green-500 mr-1" />
-                            <span className="text-sm font-medium text-gray-900">
-                              {opportunity.estimatedDealValue 
-                                ? `$${opportunity.estimatedDealValue.toLocaleString()}` 
-                                : 'TBD'
-                              }
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Expected Close Date */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            {opportunity.expectedCloseDate ? (
-                              <>
-                                <Calendar className={`h-4 w-4 mr-2 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} />
-                                <div>
-                                  <div className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
-                                    {format(opportunity.expectedCloseDate.toDate(), 'MMM d, yyyy')}
-                                  </div>
-                                  {isOverdue && (
-                                    <div className="flex items-center gap-1 text-xs text-red-600">
-                                      <AlertTriangle className="h-3 w-3" />
-                                      Overdue
-                                    </div>
-                                  )}
-                                </div>
-                              </>
-                            ) : (
-                              <span className="text-sm text-gray-500">Not set</span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Activities */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <div className="flex items-center">
-                              <Activity className="h-4 w-4 text-blue-500 mr-1" />
-                              <span className="text-sm text-gray-900 font-medium">
-                                {activitySummary.total}
-                              </span>
-                            </div>
-                            {activitySummary.scheduled > 0 && (
-                              <div className="flex items-center">
-                                <Clock className="h-3 w-3 text-blue-500 mr-1" />
-                                <span className="text-xs text-blue-600">
-                                  {activitySummary.scheduled} scheduled
-                                </span>
-                              </div>
-                            )}
-                            {activitySummary.completed > 0 && (
-                              <div className="flex items-center">
-                                <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
-                                <span className="text-xs text-green-600">
-                                  {activitySummary.completed} done
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Contacts */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <Users className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm text-gray-900">
-                              {opportunityContacts.length}
-                            </span>
-                            {opportunityContacts.length > 0 && (
-                              <div className="ml-2 text-xs text-gray-500 truncate max-w-24">
-                                {opportunityContacts[0].name}
-                                {opportunityContacts.length > 1 && ` +${opportunityContacts.length - 1}`}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* iOL Products */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-start">
-                            <Package className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
-                            <div className="max-w-32">
-                              {opportunity.iolProducts && opportunity.iolProducts.length > 0 ? (
-                                <div className="space-y-1">
-                                  {opportunity.iolProducts.slice(0, 2).map((product, index) => (
-                                    <div key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full truncate">
-                                      {product.replace('iOL ', '')}
-                                    </div>
-                                  ))}
-                                  {opportunity.iolProducts.length > 2 && (
-                                    <div className="text-xs text-gray-500">
-                                      +{opportunity.iolProducts.length - 2} more
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-gray-500">Not specified</span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Next Activity */}
-                        <td className="px-6 py-4">
-                          <div>
-                            {(() => {
-                              const nextScheduled = getNextScheduledActivity(opportunity);
-                              
-                              if (nextScheduled) {
-                                const isToday = format(nextScheduled.dateTime.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
-                                const isOverdue = isBefore(nextScheduled.dateTime.toDate(), new Date());
-                                
-                                return (
-                                  <div className="flex items-center gap-2">
-                                    <Clock className={`h-4 w-4 ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`} />
-                                    <div>
-                                      <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-gray-900'}`}>
-                                        {format(nextScheduled.dateTime.toDate(), 'MMM d, h:mm a')}
-                                      </div>
-                                      <div className="text-xs text-gray-500 truncate max-w-32">
-                                        {nextScheduled.subject}
-                                      </div>
-                                      {isOverdue && (
-                                        <div className="text-xs text-red-600 font-medium">Overdue</div>
-                                      )}
-                                      {isToday && !isOverdue && (
-                                        <div className="text-xs text-orange-600 font-medium">Today</div>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              } else {
-                                return <span className="text-sm text-gray-500">None scheduled</span>;
-                              }
-                            })()}
-                          </div>
-                        </td>
-
-                        {/* Last Activity */}
-                        <td className="px-6 py-4">
-                          <div>
-                            {(() => {
-                              const lastCompleted = getLastCompletedActivity(opportunity);
-                              
-                              if (lastCompleted) {
-                                return (
-                                  <div className="flex items-center gap-2">
-                                    <CheckCircle className="h-4 w-4 text-green-500" />
-                                    <div>
-                                      <div className="text-sm text-gray-900">
-                                        {formatDistanceToNow(lastCompleted.dateTime.toDate(), { addSuffix: true })}
-                                      </div>
-                                      <div className="text-xs text-gray-500 truncate max-w-32">
-                                        {lastCompleted.subject}
-                                      </div>
-                                      <div className="text-xs text-gray-400">
-                                        {format(lastCompleted.dateTime.toDate(), 'MMM d')}
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              } else {
-                                return <span className="text-sm text-gray-500">No activity</span>;
-                              }
-                            })()}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/opportunities/${opportunity.id}`);
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/opportunities/${opportunity.id}`);
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
-                              title="Edit Opportunity"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
+                  {Object.entries(groupedOpportunities).map(([accountName, accountOpportunities]) => (
+                    <React.Fragment key={accountName}>
+                      {/* Account Group Header */}
+                      <tr className="bg-gray-100">
+                        <td colSpan={11} className="px-6 py-3">
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-5 w-5 text-gray-600" />
+                            <span className="text-sm font-semibold text-gray-900">{accountName}</span>
+                            <span className="text-xs text-gray-500">({accountOpportunities.length} opportunities)</span>
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
+                      {/* Account Opportunities */}
+                      {accountOpportunities.map((opportunity) => {
+                        const account = accounts.find(a => a.id === opportunity.accountId);
+                        const product = opportunity.productId ? products.find(p => p.id === opportunity.productId) : null;
+                        const opportunityContacts = getContactsForOpportunity(opportunity);
+                        const isOverdue = isOpportunityOverdue(opportunity);
+                        const progress = getStageProgress(opportunity.stage);
+                        
+                        return (
+                          <tr
+                            key={opportunity.id}
+                            onClick={() => handleRowClick(opportunity)}
+                            className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          >
+                            {/* Account & Product */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-start">
+                                <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-sm font-medium text-gray-900 truncate">
+                                    {account?.name || 'Unknown Account'}
+                                  </div>
+                                  <div className="text-xs text-gray-500 truncate">
+                                    {account?.industry}
+                                  </div>
+                                  {opportunity.productId && getProductName(opportunity.productId) && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <Package className="h-3 w-3 text-blue-500" />
+                                      <span className="text-xs text-blue-700 font-medium truncate">
+                                        {getProductName(opportunity.productId)}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Opportunity Title */}
+                            <td className="px-6 py-4">
+                              <div className="max-w-48">
+                                <div className="text-sm font-medium text-gray-900 leading-tight line-clamp-2">
+                                  {opportunity.title}
+                                </div>
+                                <div className="flex items-center gap-1 mt-2">
+                                  <MapPin className="h-3 w-3 text-gray-400" />
+                                  <span className="text-xs text-gray-500">{opportunity.region}</span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* iOL Products */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-start">
+                                <Package className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                                <div className="max-w-32">
+                                  {opportunity.iolProducts && opportunity.iolProducts.length > 0 ? (
+                                    <div className="space-y-1">
+                                      {opportunity.iolProducts.slice(0, 2).map((product, index) => (
+                                        <div key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full truncate">
+                                          {product.replace('iOL ', '')}
+                                        </div>
+                                      ))}
+                                      {opportunity.iolProducts.length > 2 && (
+                                        <div className="text-xs text-gray-500">
+                                          +{opportunity.iolProducts.length - 2} more
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-gray-500">Not specified</span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Stage & Progress */}
+                            <td className="px-6 py-4">
+                              <div className="space-y-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(opportunity.stage)}`}>
+                                  {opportunity.stage}
+                                </span>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                                      opportunity.stage === 'Closed-Won' ? 'bg-green-500' : 
+                                      opportunity.stage === 'Closed-Lost' ? 'bg-red-500' : 
+                                      'bg-blue-500'
+                                    }`}
+                                    style={{ width: `${progress}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Next Activity */}
+                            <td className="px-6 py-4">
+                              <div>
+                                {(() => {
+                                  const nextScheduled = getNextScheduledActivity(opportunity);
+                                  
+                                  if (nextScheduled) {
+                                    const isToday = format(nextScheduled.dateTime.toDate(), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                                    const isOverdue = isBefore(nextScheduled.dateTime.toDate(), new Date());
+                                    
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <Clock className={`h-4 w-4 ${isOverdue ? 'text-red-500' : isToday ? 'text-orange-500' : 'text-blue-500'}`} />
+                                        <div>
+                                          <div className={`text-sm font-medium ${isOverdue ? 'text-red-600' : isToday ? 'text-orange-600' : 'text-gray-900'}`}>
+                                            {format(nextScheduled.dateTime.toDate(), 'MMM d, h:mm a')}
+                                          </div>
+                                          <div className="text-xs text-gray-500 truncate max-w-32">
+                                            {nextScheduled.subject}
+                                          </div>
+                                          {isOverdue && (
+                                            <div className="text-xs text-red-600 font-medium">Overdue</div>
+                                          )}
+                                          {isToday && !isOverdue && (
+                                            <div className="text-xs text-orange-600 font-medium">Today</div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    return <span className="text-sm text-gray-500">None scheduled</span>;
+                                  }
+                                })()}
+                              </div>
+                            </td>
+
+                            {/* Last Activity */}
+                            <td className="px-6 py-4">
+                              <div>
+                                {(() => {
+                                  const lastCompleted = getLastCompletedActivity(opportunity);
+                                  
+                                  if (lastCompleted) {
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <CheckCircle className="h-4 w-4 text-green-500" />
+                                        <div>
+                                          <div className="text-sm text-gray-900">
+                                            {formatDistanceToNow(lastCompleted.dateTime.toDate(), { addSuffix: true })}
+                                          </div>
+                                          <div className="text-xs text-gray-500 truncate max-w-32">
+                                            {lastCompleted.subject}
+                                          </div>
+                                          <div className="text-xs text-gray-400">
+                                            {format(lastCompleted.dateTime.toDate(), 'MMM d')}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    return <span className="text-sm text-gray-500">No activity</span>;
+                                  }
+                                })()}
+                              </div>
+                            </td>
+
+                            {/* Priority */}
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(opportunity.priority)}`}>
+                                {opportunity.priority}
+                              </span>
+                            </td>
+
+                            {/* Deal Value */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <DollarSign className="h-4 w-4 text-green-500 mr-1" />
+                                <span className="text-sm font-medium text-gray-900">
+                                  {opportunity.estimatedDealValue 
+                                    ? `$${opportunity.estimatedDealValue.toLocaleString()}` 
+                                    : 'TBD'
+                                  }
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Expected Close Date */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                {opportunity.expectedCloseDate ? (
+                                  <>
+                                    <Calendar className={`h-4 w-4 mr-2 ${isOverdue ? 'text-red-500' : 'text-gray-400'}`} />
+                                    <div>
+                                      <div className={`text-sm ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'}`}>
+                                        {format(opportunity.expectedCloseDate.toDate(), 'MMM d, yyyy')}
+                                      </div>
+                                      {isOverdue && (
+                                        <div className="flex items-center gap-1 text-xs text-red-600">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          Overdue
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <span className="text-sm text-gray-500">Not set</span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Contacts */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <Users className="h-4 w-4 text-gray-400 mr-2" />
+                                <span className="text-sm text-gray-900">
+                                  {opportunityContacts.length}
+                                </span>
+                                {opportunityContacts.length > 0 && (
+                                  <div className="ml-2 text-xs text-gray-500 truncate max-w-24">
+                                    {opportunityContacts[0].name}
+                                    {opportunityContacts.length > 1 && ` +${opportunityContacts.length - 1}`}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/opportunities/${opportunity.id}`);
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                  title="View Details"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/opportunities/${opportunity.id}`);
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                                  title="Edit Opportunity"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>

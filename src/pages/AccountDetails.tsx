@@ -18,6 +18,8 @@ import { Timestamp } from 'firebase/firestore';
 import type { Account, Product, Contact, ContactType, Opportunity } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument } from '../lib/firestore';
 import { format } from 'date-fns';
+import { useAuth } from '../hooks/useAuth';
+import { OwnerSelect } from '../components/OwnerSelect';
 
 const INDUSTRIES = [
   { value: 'PMS', label: 'PMS: Property Management System' },
@@ -32,6 +34,7 @@ const INDUSTRIES = [
 export const AccountDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
   const [account, setAccount] = useState<Account | null>(null);
@@ -57,8 +60,16 @@ export const AccountDetails: React.FC = () => {
     website: '',
     parentAccountId: '',
     tags: [] as string[],
-    notes: ''
+    notes: '',
+    ownerId: currentUser?.uid || ''
   });
+
+  useEffect(() => {
+    // Set default owner for new accounts
+    if (isNew && currentUser?.uid && !formData.ownerId) {
+      setFormData(prev => ({ ...prev, ownerId: currentUser.uid }));
+    }
+  }, [isNew, currentUser?.uid, formData.ownerId]);
 
   useEffect(() => {
     fetchData();
@@ -90,7 +101,8 @@ export const AccountDetails: React.FC = () => {
             website: accountTyped.website || '',
             parentAccountId: accountTyped.parentAccountId || '',
             tags: accountTyped.tags || [],
-            notes: accountTyped.notes || ''
+            notes: accountTyped.notes || '',
+            ownerId: accountTyped.ownerId || currentUser?.uid || ''
           });
         }
       }
@@ -177,6 +189,7 @@ export const AccountDetails: React.FC = () => {
           accountId: id || '',
           contactType: 'Primary' as ContactType,
           productIds: [],
+          ownerId: currentUser?.uid || '',
           createdAt: Timestamp.now()
         };
         
@@ -233,8 +246,8 @@ export const AccountDetails: React.FC = () => {
               <h1 className="text-xl font-semibold text-gray-900">
                 {isNew ? 'New Account' : formData.name || 'Edit Account'}
               </h1>
-              {!isNew && parentAccount && (
-                <p className="text-sm text-gray-500">{parentAccount.name}</p>
+              {parentAccount && (
+                <p className="text-sm text-gray-500">Parent: {parentAccount.name}</p>
               )}
             </div>
           </div>
@@ -252,18 +265,16 @@ export const AccountDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* Content - Compact Layout */}
+      {/* Main Content */}
       <div className="flex-1 overflow-auto pb-20">
-        <div className="max-w-6xl mx-auto p-4">
-          <form id="account-form" onSubmit={handleSubmit} className="space-y-4">
-            
-            {/* Main Information Grid */}
+        <div className="max-w-7xl mx-auto p-4">
+          <form id="account-form" onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               
-              {/* Left Column - Core Account Info */}
+              {/* Left Column (2/3) - Core Information */}
               <div className="lg:col-span-2 space-y-4">
                 
-                {/* Basic Info */}
+                {/* Basic Information */}
                 <div className="bg-white shadow rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Building2 className="h-4 w-4 text-gray-500" />
@@ -287,10 +298,11 @@ export const AccountDetails: React.FC = () => {
                         value={formData.industry}
                         onChange={(e) => setFormData({ ...formData, industry: e.target.value as Account['industry'] })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
                       >
                         {INDUSTRIES.map((industry) => (
                           <option key={industry.value} value={industry.value}>
-                            {industry.value} - {industry.label.split(': ')[1]}
+                            {industry.label}
                           </option>
                         ))}
                       </select>
@@ -303,49 +315,46 @@ export const AccountDetails: React.FC = () => {
                         value={formData.region}
                         onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="e.g., North America, EMEA, APAC"
+                        required
                       />
                     </div>
 
-                    <div className="md:col-span-2">
+                    <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Website</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                          <Globe className="h-3.5 w-3.5 text-gray-400" />
-                        </div>
-                        <input
-                          type="url"
-                          value={formData.website}
-                          onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                          className="w-full text-sm pl-8 border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                          placeholder="https://example.com"
-                        />
-                      </div>
+                      <input
+                        type="url"
+                        value={formData.website}
+                        onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="https://..."
+                      />
                     </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Parent Account</label>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Parent Account (Optional)</label>
                       <select
                         value={formData.parentAccountId}
                         onChange={(e) => setFormData({ ...formData, parentAccountId: e.target.value })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       >
                         <option value="">No Parent Account</option>
-                        {accounts.filter(a => a.id !== id).map((acc) => (
-                          <option key={acc.id} value={acc.id}>
-                            {acc.name}
+                        {accounts
+                          .filter(acc => acc.id !== id) // Don't allow self-reference
+                          .map((account) => (
+                          <option key={account.id} value={account.id}>
+                            {account.name}
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
-                      <textarea
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        rows={2}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="Additional notes..."
+                    <div>
+                      <OwnerSelect
+                        value={formData.ownerId}
+                        onChange={(ownerId) => setFormData({ ...formData, ownerId })}
+                        label="Account Owner"
+                        required
                       />
                     </div>
                   </div>

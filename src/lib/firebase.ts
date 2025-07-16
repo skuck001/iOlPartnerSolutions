@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -24,23 +24,10 @@ if (typeof window !== 'undefined') {
   // Only run in browser environment
   try {
     // Enable offline persistence for better error handling
-    import('firebase/firestore').then(({ enableNetwork, disableNetwork }) => {
-      // This helps handle connectivity issues better
-    });
+    console.log('Firebase initialized successfully');
   } catch (error) {
     console.warn('Firestore offline persistence not available:', error);
   }
-}
-
-// For development, connect to emulators if needed
-if (import.meta.env.DEV) {
-  // Uncomment these lines if you want to use Firebase emulators in development
-  // try {
-  //   connectFirestoreEmulator(db, 'localhost', 8080);
-  //   connectAuthEmulator(auth, 'http://localhost:9099');
-  // } catch (error) {
-  //   console.log('Emulators already connected');
-  // }
 }
 
 export default app; 

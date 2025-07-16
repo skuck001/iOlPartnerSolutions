@@ -6,8 +6,12 @@ export interface Task {
   id: string;
   title: string;
   opportunityId?: string;
-  assignedTo: string;
+  assignedTo: string; // Keep for backward compatibility
+  ownerId: string; // User ID of the task owner (primary field going forward)
   dueDate: Timestamp;
   status: TaskStatus;
   bucket?: string;
+  description?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
 } 

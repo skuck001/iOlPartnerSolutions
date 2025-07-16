@@ -1,5 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 import { createDocument } from './firestore';
+import { clearUsersCache } from './userUtils';
 
 export const sampleAccounts = [
   {
@@ -76,9 +77,132 @@ export const sampleTasks = [
   }
 ];
 
+export const sampleUsers = [
+  {
+    id: 'user1',
+    email: 'john.doe@iol.world',
+    displayName: 'John Doe',
+    firstName: 'John',
+    lastName: 'Doe',
+    jobTitle: 'Sales Manager',
+    department: 'Sales',
+    location: 'New York',
+    role: 'user',
+    permissions: [],
+    timezone: 'America/New_York',
+    notifications: {
+      email: true,
+      push: true,
+      weekly: true,
+    },
+    createdAt: Timestamp.now(),
+    lastLoginAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  },
+  {
+    id: 'user2',
+    email: 'jane.smith@iol.world',
+    displayName: 'Jane Smith',
+    firstName: 'Jane',
+    lastName: 'Smith',
+    jobTitle: 'Product Manager',
+    department: 'Product',
+    location: 'San Francisco',
+    role: 'user',
+    permissions: [],
+    timezone: 'America/Los_Angeles',
+    notifications: {
+      email: true,
+      push: false,
+      weekly: true,
+    },
+    createdAt: Timestamp.now(),
+    lastLoginAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  },
+  {
+    id: 'user3',
+    email: 'mike.johnson@iol.world',
+    displayName: 'Mike Johnson',
+    firstName: 'Mike',
+    lastName: 'Johnson',
+    jobTitle: 'Engineering Lead',
+    department: 'Engineering',
+    location: 'Austin',
+    role: 'admin',
+    permissions: ['admin'],
+    timezone: 'America/Chicago',
+    notifications: {
+      email: true,
+      push: true,
+      weekly: false,
+    },
+    createdAt: Timestamp.now(),
+    lastLoginAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  },
+  {
+    id: 'user4',
+    email: 'sarah.wilson@iol.world',
+    displayName: 'Sarah Wilson',
+    firstName: 'Sarah',
+    lastName: 'Wilson',
+    jobTitle: 'Customer Success Manager',
+    department: 'Customer Success',
+    location: 'London',
+    role: 'user',
+    permissions: [],
+    timezone: 'Europe/London',
+    notifications: {
+      email: true,
+      push: true,
+      weekly: true,
+    },
+    createdAt: Timestamp.now(),
+    lastLoginAt: Timestamp.now(),
+    updatedAt: Timestamp.now()
+  }
+];
+
+// Utility function to seed just users for testing
+export const seedUsers = async () => {
+  try {
+    console.log('Seeding users...');
+    for (const user of sampleUsers) {
+      try {
+        await createDocument('users', user, user.id);
+        console.log(`Created user: ${user.displayName} (${user.email})`);
+      } catch (error) {
+        console.warn(`User ${user.email} might already exist:`, error);
+      }
+    }
+    
+    // Clear users cache to force fresh fetch
+    clearUsersCache();
+    console.log('Users seeded successfully and cache cleared!');
+  } catch (error) {
+    console.error('Error seeding users:', error);
+  }
+};
+
 export const seedDatabase = async () => {
   try {
     console.log('Seeding database with sample data...');
+    
+    // Create users first
+    console.log('Creating sample users...');
+    for (const user of sampleUsers) {
+      try {
+        await createDocument('users', user, user.id);
+        console.log(`Created user: ${user.displayName} (${user.email})`);
+      } catch (error) {
+        console.warn(`User ${user.email} might already exist:`, error);
+      }
+    }
+    
+    // Clear users cache to force fresh fetch
+    clearUsersCache();
+    console.log('Cleared users cache');
     
     // Create accounts
     const accountIds = [];

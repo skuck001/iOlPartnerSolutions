@@ -52,17 +52,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
 
       if (!userDoc.exists()) {
-        // Create new user document
+        // Create new user document with enhanced profile fields
         await setDoc(userDocRef, {
           ...userData,
+          firstName: '',
+          lastName: '',
+          phone: '',
+          jobTitle: '',
+          department: '',
+          location: '',
+          bio: '',
+          avatar: '',
           role: 'user', // Default role
           permissions: [],
-          createdAt: Timestamp.now()
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          notifications: {
+            email: true,
+            push: true,
+            weekly: true,
+          },
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now()
         });
         console.log('Created new user document for:', user.email);
       } else {
         // Update last login time
-        await setDoc(userDocRef, userData, { merge: true });
+        await setDoc(userDocRef, {
+          ...userData,
+          updatedAt: Timestamp.now()
+        }, { merge: true });
         console.log('Updated user document for:', user.email);
       }
     } catch (error) {
@@ -73,13 +91,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     const result = await signInWithEmailAndPassword(auth, email, password);
-    const user = {
-      uid: result.user.uid,
-      email: result.user.email,
-      displayName: result.user.displayName
-    };
-    // Skip user document creation for now to isolate the issue
-    // createOrUpdateUserDocument(user).catch(console.error);
+    // Re-enable user document creation now that we have enhanced profile fields
+    if (result.user) {
+      const user = {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName
+      };
+      await createOrUpdateUserDocument(user);
+    }
   };
 
   const logout = async () => {

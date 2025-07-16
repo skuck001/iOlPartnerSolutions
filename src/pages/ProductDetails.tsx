@@ -7,34 +7,54 @@ import {
   Package,
   Building2,
   Users,
-  Tag,
   Plus,
   X,
-  Globe,
-  Network,
-  Mail,
-  Phone,
   Calendar,
+  Target,
+  CheckCircle2,
+  Globe,
+  Tag,
+  Network,
   Briefcase
 } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import type { Product, Account, Contact, ContactType, Opportunity } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument, updateProductWithSync, deleteProductWithSync } from '../lib/firestore';
 import { format } from 'date-fns';
+import { useAuth } from '../hooks/useAuth';
+import { OwnerSelect } from '../components/OwnerSelect';
 
-const BUSINESS_TYPES = [
-  { value: 'PMS', label: 'PMS: Property Management System' },
-  { value: 'GDS', label: 'GDS: Global Distribution System' },
-  { value: 'CRS', label: 'CRS: Central Reservation System' },
-  { value: 'CM', label: 'CM: Channel Manager' },
-  { value: 'PAY', label: 'PAY: Payment Solutions' },
-  { value: 'BE', label: 'BE: Booking Engine' },
-  { value: 'RMS', label: 'RMS: Revenue Management System' }
+const PRODUCT_CATEGORIES = [
+  'Business Intelligence',
+  'Revenue Management', 
+  'Distribution',
+  'Guest Experience',
+  'Operations',
+  'Connectivity',
+  'Booking Engine',
+  'Channel Management',
+  'Other'
+];
+
+const PRODUCT_SUBCATEGORIES = [
+  'Rate Shopping Tools',
+  'Competitive Intelligence',
+  'Market Analytics',
+  'Demand Forecasting',
+  'Pricing Optimization',
+  'Reservation Systems',
+  'Property Management',
+  'Guest Communication',
+  'Loyalty Programs',
+  'API Integration',
+  'Data Connectivity',
+  'Other'
 ];
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
   const [product, setProduct] = useState<Product | null>(null);
@@ -57,14 +77,26 @@ export const ProductDetails: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     accountId: '',
+    category: 'Business Intelligence' as Product['category'],
+    subcategory: 'Rate Shopping Tools' as Product['subcategory'],
     description: '',
-    tags: [] as string[],
-    businessType: '',
+    version: '',
+    status: 'Active' as Product['status'],
     website: '',
-    numberOfIntegrations: 0,
-    numberOfHotelsConnected: 0,
-    contactIds: [] as string[]
+    contactIds: [] as string[],
+    tags: [] as string[],
+    targetMarket: '',
+    pricing: '',
+    notes: '',
+    ownerId: currentUser?.uid || ''
   });
+
+  useEffect(() => {
+    // Set default owner for new products
+    if (isNew && currentUser?.uid && !formData.ownerId) {
+      setFormData(prev => ({ ...prev, ownerId: currentUser.uid }));
+    }
+  }, [isNew, currentUser?.uid, formData.ownerId]);
 
   useEffect(() => {
     fetchData();
@@ -85,29 +117,29 @@ export const ProductDetails: React.FC = () => {
       if (!isNew && id && id !== 'new') {
         const productData = await getDocument('products', id);
         if (productData) {
-          const productTyped = productData as Product & {
-            businessType?: string;
-            website?: string;
-            numberOfIntegrations?: number;
-            numberOfHotelsConnected?: number;
-          };
+          const productTyped = productData as Product;
           setProduct(productTyped);
           setFormData({
             name: productTyped.name,
             accountId: productTyped.accountId,
+            category: productTyped.category,
+            subcategory: productTyped.subcategory,
             description: productTyped.description || '',
-            tags: productTyped.tags || [],
-            businessType: productTyped.businessType || '',
+            version: productTyped.version || '',
+            status: productTyped.status,
             website: productTyped.website || '',
-            numberOfIntegrations: productTyped.numberOfIntegrations || 0,
-            numberOfHotelsConnected: productTyped.numberOfHotelsConnected || 0,
-            contactIds: productTyped.contactIds || []
+            contactIds: productTyped.contactIds || [],
+            tags: productTyped.tags || [],
+            targetMarket: productTyped.targetMarket || '',
+            pricing: productTyped.pricing || '',
+            notes: productTyped.notes || '',
+            ownerId: productTyped.ownerId || currentUser?.uid || ''
           });
-
-          // Get account details
-          if (productTyped.accountId) {
-            const accountData = await getDocument('accounts', productTyped.accountId);
-            setAccount(accountData as Account);
+          
+          // Find the account
+          const relatedAccount = accountsData.find((acc: any) => acc.id === productTyped.accountId);
+          if (relatedAccount) {
+            setAccount(relatedAccount as Account);
           }
         }
       }
@@ -116,11 +148,6 @@ export const ProductDetails: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getContactName = (contactId: string) => {
-    const contact = contacts.find(c => c.id === contactId);
-    return contact?.name || 'Unknown';
   };
 
   const getAccountName = (accountId: string) => {
@@ -201,6 +228,7 @@ export const ProductDetails: React.FC = () => {
           accountId: formData.accountId,
           contactType: 'Primary' as ContactType,
           productIds: [],
+          ownerId: currentUser?.uid || '',
           createdAt: Timestamp.now()
         };
         
@@ -294,18 +322,16 @@ export const ProductDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* Content - Compact Layout */}
+      {/* Content */}
       <div className="flex-1 overflow-auto pb-20">
-        <div className="max-w-6xl mx-auto p-4">
-          <form id="product-form" onSubmit={handleSubmit} className="space-y-4">
-            
-            {/* Main Information Grid */}
+        <div className="max-w-7xl mx-auto p-4">
+          <form id="product-form" onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               
-              {/* Left Column - Core Product Info */}
+              {/* Left Column (2/3) - Core Information */}
               <div className="lg:col-span-2 space-y-4">
                 
-                {/* Basic Info */}
+                {/* Product Information */}
                 <div className="bg-white shadow rounded-lg p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <Package className="h-4 w-4 text-gray-500" />
@@ -341,35 +367,81 @@ export const ProductDetails: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Business Type</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
                       <select
-                        value={formData.businessType}
-                        onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
+                        value={formData.category}
+                        onChange={(e) => setFormData({ ...formData, category: e.target.value as Product['category'] })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
                       >
-                        <option value="">Select Type</option>
-                        {BUSINESS_TYPES.map((type) => (
-                          <option key={type.value} value={type.value}>
-                            {type.value} - {type.label.split(': ')[1]}
+                        {PRODUCT_CATEGORIES.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    <div className="md:col-span-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory</label>
+                      <select
+                        value={formData.subcategory}
+                        onChange={(e) => setFormData({ ...formData, subcategory: e.target.value as Product['subcategory'] })}
+                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
+                      >
+                        {PRODUCT_SUBCATEGORIES.map((subcategory) => (
+                          <option key={subcategory} value={subcategory}>
+                            {subcategory}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Version</label>
+                      <input
+                        type="text"
+                        value={formData.version}
+                        onChange={(e) => setFormData({ ...formData, version: e.target.value })}
+                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="e.g., v2.1.0"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value as Product['status'] })}
+                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Deprecated">Deprecated</option>
+                        <option value="Development">Development</option>
+                        <option value="Beta">Beta</option>
+                      </select>
+                    </div>
+
+                    <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Website</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                          <Globe className="h-3.5 w-3.5 text-gray-400" />
-                        </div>
-                        <input
-                          type="url"
-                          value={formData.website}
-                          onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                          className="w-full text-sm pl-8 border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                          placeholder="https://example.com"
-                        />
-                      </div>
+                      <input
+                        type="url"
+                        value={formData.website}
+                        onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="https://..."
+                      />
+                    </div>
+
+                    <div>
+                      <OwnerSelect
+                        value={formData.ownerId}
+                        onChange={(ownerId) => setFormData({ ...formData, ownerId })}
+                        label="Product Owner"
+                        required
+                      />
                     </div>
 
                     <div className="md:col-span-2">
@@ -377,9 +449,9 @@ export const ProductDetails: React.FC = () => {
                       <textarea
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        rows={2}
+                        rows={3}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="Brief product description..."
+                        placeholder="Brief description of the product..."
                       />
                     </div>
                   </div>

@@ -28,6 +28,7 @@ import * as XLSX from 'xlsx';
 import type { Account, Industry, CompanySize, Contact, Product, Opportunity } from '../types';
 import { getDocuments } from '../lib/firestore';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
+import { getUserDisplayName, getUserById } from '../lib/userUtils';
 
 type SortField = 'name' | 'industry' | 'region' | 'status' | 'companySize' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
@@ -45,10 +46,32 @@ export const Accounts: React.FC = () => {
   const [industryFilter, setIndustryFilter] = useState<Industry | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [regionFilter, setRegionFilter] = useState<string>('All');
+  const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    // Fetch owner names for all accounts
+    const fetchOwnerNames = async () => {
+      const ownerIds = Array.from(new Set(accounts.map(account => account.ownerId).filter(Boolean)));
+      const names: Record<string, string> = {};
+      
+      await Promise.all(
+        ownerIds.map(async (ownerId) => {
+          const user = await getUserById(ownerId);
+          names[ownerId] = getUserDisplayName(user);
+        })
+      );
+      
+      setOwnerNames(names);
+    };
+
+    if (accounts.length > 0) {
+      fetchOwnerNames();
+    }
+  }, [accounts]);
 
   const fetchData = async () => {
     try {
@@ -288,7 +311,7 @@ export const Accounts: React.FC = () => {
       const worksheet = XLSX.utils.json_to_sheet(exportData);
 
       // Auto-size columns
-      const columnWidths = [];
+      const columnWidths: Array<{wch: number}> = [];
       const headers = Object.keys(exportData[0] || {});
       
       headers.forEach((header, index) => {
@@ -485,6 +508,9 @@ export const Accounts: React.FC = () => {
                     </th>
                     <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tags & Links
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Owner
                     </th>
                     <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -696,6 +722,16 @@ export const Accounts: React.FC = () => {
                                 </span>
                               </div>
                             )}
+                          </div>
+                        </td>
+
+                        {/* Owner */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center">
+                            <Users className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-900 font-medium">
+                              {ownerNames[account.ownerId] || 'N/A'}
+                            </span>
                           </div>
                         </td>
 

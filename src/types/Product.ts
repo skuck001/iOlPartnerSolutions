@@ -40,6 +40,7 @@ export interface Product {
   targetMarket?: string;
   pricing?: string;
   notes?: string;
+  ownerId: string; // User ID of the product owner
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 } 

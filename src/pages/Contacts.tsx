@@ -294,7 +294,7 @@ export const Contacts: React.FC = () => {
       const worksheet = XLSX.utils.json_to_sheet(exportData);
 
       // Auto-size columns
-      const columnWidths = [];
+      const columnWidths: Array<{wch: number}> = [];
       const headers = Object.keys(exportData[0] || {});
       
       headers.forEach((header, index) => {

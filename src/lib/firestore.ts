@@ -4,33 +4,44 @@ import {
   getDocs,
   getDoc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
   where,
-  orderBy,
   Timestamp,
   QueryConstraint
 } from 'firebase/firestore';
 import { db } from './firebase';
+import type { Contact, Product } from '../types';
 
 // Generic collection reference
 export const getCollection = (collectionName: string) => collection(db, collectionName);
 
 // Generic CRUD operations
-export const createDocument = async (collectionName: string, data: any) => {
-  const docRef = await addDoc(getCollection(collectionName), {
+export const createDocument = async (collectionName: string, data: any, customId?: string) => {
+  const documentData = {
     ...data,
     // Only add createdAt if not already provided
     createdAt: data.createdAt || Timestamp.now()
-  });
-  return docRef;
+  };
+
+  if (customId) {
+    // Use setDoc for custom IDs
+    const docRef = doc(db, collectionName, customId);
+    await setDoc(docRef, documentData);
+    return docRef;
+  } else {
+    // Use addDoc for auto-generated IDs
+    const docRef = await addDoc(getCollection(collectionName), documentData);
+    return docRef;
+  }
 };
 
-export const getDocument = async (collectionName: string, id: string) => {
+export const getDocument = async <T = any>(collectionName: string, id: string): Promise<T | null> => {
   const docRef = doc(db, collectionName, id);
   const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
+  return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as T : null;
 };
 
 export const updateDocument = async (collectionName: string, id: string, data: any) => {
@@ -88,7 +99,7 @@ export const syncProductContactRelationship = async (
 
   // Add product to new contacts
   for (const contactId of contactsToAdd) {
-    const contact = await getDocument('contacts', contactId);
+    const contact = await getDocument<Contact>('contacts', contactId);
     if (contact) {
       const updatedProductIds = [...(contact.productIds || [])];
       if (!updatedProductIds.includes(productId)) {
@@ -100,7 +111,7 @@ export const syncProductContactRelationship = async (
 
   // Remove product from removed contacts
   for (const contactId of contactsToRemove) {
-    const contact = await getDocument('contacts', contactId);
+    const contact = await getDocument<Contact>('contacts', contactId);
     if (contact) {
       const updatedProductIds = (contact.productIds || []).filter(id => id !== productId);
       await updateDocument('contacts', contactId, { productIds: updatedProductIds });
@@ -119,7 +130,7 @@ export const syncContactProductRelationship = async (
 
   // Add contact to new products
   for (const productId of productsToAdd) {
-    const product = await getDocument('products', productId);
+    const product = await getDocument<Product>('products', productId);
     if (product) {
       const updatedContactIds = [...(product.contactIds || [])];
       if (!updatedContactIds.includes(contactId)) {
@@ -131,7 +142,7 @@ export const syncContactProductRelationship = async (
 
   // Remove contact from removed products
   for (const productId of productsToRemove) {
-    const product = await getDocument('products', productId);
+    const product = await getDocument<Product>('products', productId);
     if (product) {
       const updatedContactIds = (product.contactIds || []).filter(id => id !== contactId);
       await updateDocument('products', productId, { contactIds: updatedContactIds });
@@ -163,7 +174,7 @@ export const updateContactWithSync = async (contactId: string, data: any, previo
 // Clean up relationships when deleting
 export const deleteProductWithSync = async (productId: string) => {
   // Get the product first to see its contacts
-  const product = await getDocument('products', productId);
+  const product = await getDocument<Product>('products', productId);
   if (product?.contactIds) {
     // Remove this product from all associated contacts
     await syncProductContactRelationship(productId, [], product.contactIds);
@@ -175,7 +186,7 @@ export const deleteProductWithSync = async (productId: string) => {
 
 export const deleteContactWithSync = async (contactId: string) => {
   // Get the contact first to see its products
-  const contact = await getDocument('contacts', contactId);
+  const contact = await getDocument<Contact>('contacts', contactId);
   if (contact?.productIds) {
     // Remove this contact from all associated products
     await syncContactProductRelationship(contactId, [], contact.productIds);
@@ -189,7 +200,7 @@ export const deleteContactWithSync = async (contactId: string) => {
 export const updateContactsLastActivity = async (contactIds: string[], activityDate: Date) => {
   for (const contactId of contactIds) {
     try {
-      const contact = await getDocument('contacts', contactId);
+      const contact = await getDocument<Contact>('contacts', contactId);
       if (contact) {
         const currentLastContact = contact.lastContactDate?.toDate();
         

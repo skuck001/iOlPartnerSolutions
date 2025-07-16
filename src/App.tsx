@@ -16,6 +16,7 @@ import { Tasks } from './pages/Tasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { WeeklyReport } from './pages/WeeklyReport';
 import { OpportunityInsights } from './pages/OpportunityInsights';
+import { UserProfile } from './pages/UserProfile';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -30,6 +31,11 @@ function AppRoutes() {
       <Route path="/" element={
         <ProtectedRoute>
           <Dashboard />
+        </ProtectedRoute>
+      } />
+      <Route path="/profile" element={
+        <ProtectedRoute>
+          <UserProfile />
         </ProtectedRoute>
       } />
       <Route path="/weekly-report" element={

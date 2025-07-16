@@ -9,14 +9,14 @@ import {
   CheckSquare,
   LogOut,
   ChevronDown,
-  Calendar,
   TrendingUp,
   ClipboardList,
-  BarChart3
+  BarChart3,
+  Settings
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { getDocument } from '../lib/firestore';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import type { User } from '../types';
 
 interface LayoutProps {
@@ -36,34 +36,46 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   useEffect(() => {
-    // Skip Firestore user profile fetching for now to isolate the issue
-    // const fetchUserProfile = async () => {
-    //   if (currentUser) {
-    //     try {
-    //       const profile = await getDocument('users', currentUser.uid);
-    //       setUserProfile(profile as User);
-    //     } catch (error) {
-    //       console.error('Error fetching user profile:', error);
-    //     }
-    //   }
-    // };
+    const fetchUserProfile = async () => {
+      if (currentUser) {
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists()) {
+            setUserProfile(userDoc.data() as User);
+          } else {
+            // Fallback to basic user data if document doesn't exist
+            setUserProfile({
+              id: currentUser.uid,
+              email: currentUser.email!,
+              displayName: currentUser.displayName || undefined,
+              role: 'user',
+              permissions: [],
+              createdAt: Timestamp.now(),
+              lastLoginAt: Timestamp.now()
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching user profile:', error);
+          // Fallback to basic user data on error
+          setUserProfile({
+            id: currentUser.uid,
+            email: currentUser.email!,
+            displayName: currentUser.displayName || undefined,
+            role: 'user',
+            permissions: [],
+            createdAt: Timestamp.now(),
+            lastLoginAt: Timestamp.now()
+          });
+        }
+      }
+    };
 
-    // fetchUserProfile();
-    
-    // Use basic user data without Firestore
-    if (currentUser) {
-      setUserProfile({
-        id: currentUser.uid,
-        email: currentUser.email!,
-        displayName: currentUser.displayName,
-        role: 'user',
-        permissions: [],
-        createdAt: Timestamp.now(),
-        lastLoginAt: Timestamp.now()
-      });
-    }
+    fetchUserProfile();
   }, [currentUser]);
 
   const handleLogout = async () => {
@@ -100,7 +112,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
 
           {/* User Info */}
-          <div className="px-6 py-4 border-b border-gray-800">
+          <div className="px-6 py-4 border-b border-gray-800 relative">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-iol-red rounded-full flex items-center justify-center">
@@ -110,15 +122,48 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
                 <div>
                   <p className="text-sm font-medium truncate max-w-32 text-white" title={currentUser?.email || ''}>
-                    {currentUser?.email}
+                    {userProfile?.firstName && userProfile?.lastName 
+                      ? `${userProfile.firstName} ${userProfile.lastName}`
+                      : userProfile?.displayName || currentUser?.email}
                   </p>
                   <p className="text-xs text-gray-400">
                     {formatRole(userProfile?.role)}
                   </p>
                 </div>
               </div>
-              <ChevronDown className="h-4 w-4 text-gray-400" />
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="p-1 rounded hover:bg-gray-800 transition-colors"
+              >
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
+              </button>
             </div>
+
+            {/* User dropdown menu */}
+            {showUserMenu && (
+              <div className="absolute left-3 right-3 top-full mt-2 bg-gray-800 rounded-md shadow-lg border border-gray-700 z-50">
+                <div className="py-1">
+                  <NavLink
+                    to="/profile"
+                    onClick={() => setShowUserMenu(false)}
+                    className="flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                  >
+                    <Settings className="h-4 w-4 mr-3" />
+                    Profile Settings
+                  </NavLink>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      handleLogout();
+                    }}
+                    className="w-full flex items-center px-4 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 mr-3" />
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Navigation */}
@@ -183,17 +228,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
               </div>
             </div>
           </nav>
-
-          {/* Logout */}
-          <div className="p-6 border-t border-gray-800">
-            <button
-              onClick={handleLogout}
-              className="w-full sidebar-item sidebar-item-inactive-iol justify-center"
-            >
-              <LogOut className="h-5 w-5 mr-3" />
-              Sign Out
-            </button>
-          </div>
         </div>
       </div>
 

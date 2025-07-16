@@ -77,6 +77,7 @@ export interface Opportunity {
   expectedCloseDate?: Timestamp;
   lastActivityDate?: Timestamp;
   
+  ownerId: string; // User ID of the opportunity owner
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 } 

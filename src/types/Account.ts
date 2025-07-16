@@ -19,6 +19,7 @@ export interface Account {
   status: 'Active' | 'Inactive' | 'Prospect' | 'Partner';
   tags: string[];
   notes?: string;
+  ownerId: string; // User ID of the account owner
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 } 

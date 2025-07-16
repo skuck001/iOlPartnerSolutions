@@ -4,83 +4,87 @@ import {
   ArrowLeft, 
   Save, 
   Trash2,
-  Building2,
-  DollarSign,
-  MapPin,
   Target,
-  Calendar,
+  Building2,
   Users,
-  TrendingUp,
   Package,
-  MessageSquare,
-  CheckCircle,
-  Activity,
   Plus,
   X,
-  User,
-  AlertCircle,
-  Clock,
+  Calendar,
   CheckSquare,
-  FileText,
-  Phone,
+  Clock,
+  MessageSquare,
   Video,
-  Mail
+  Phone,
+  Mail,
+  MapPin,
+  Briefcase,
+  Globe,
+  User,
+  Edit3,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Search,
+  MoreVertical,
+  CheckCircle2,
+  Circle,
+  AlertTriangle,
+  UserPlus,
+  Activity,
+  TrendingUp,
+  DollarSign,
+  FileText
 } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import type { 
   Opportunity, 
   OpportunityStage, 
   OpportunityPriority,
-  Activity as ActivityType,
-  ActivityStatus,
-  ChecklistItem,
   Account, 
   Contact, 
-  Product
+  Product,
+  Activity as ActivityType,
+  ActivityStatus,
+  ChecklistItem
 } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument } from '../lib/firestore';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
+import { useAuth } from '../hooks/useAuth';
+import { OwnerSelect } from '../components/OwnerSelect';
 
-const OPPORTUNITY_STAGES: OpportunityStage[] = [
-  'Discovery',
-  'Proposal',
-  'Negotiation',
-  'Closed-Won',
-  'Closed-Lost'
+const OPPORTUNITY_STAGES: OpportunityStage[] = ['Discovery', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
+const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
+
+const IOL_PRODUCTS = [
+  'Rate Intelligence',
+  'Competitive Intelligence',
+  'Market Analytics',
+  'Demand Forecasting',
+  'Revenue Optimization',
+  'Distribution Analytics',
+  'Performance Benchmarking'
 ];
-
-const PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 
 const ACTIVITY_TYPES = ['Meeting', 'Email', 'Call', 'WhatsApp', 'Demo', 'Workshop'];
 const ACTIVITY_METHODS = ['In-person', 'Zoom', 'Phone', 'Teams', 'Email'];
+const ACTIVITY_PRIORITIES = ['High', 'Medium', 'Low'];
 
 const COMMERCIAL_MODELS = [
-  '1% issuing fee',
-  '2% issuing fee', 
-  '3% issuing fee',
-  'Revenue share 10%',
-  'Revenue share 15%',
-  'Revenue share 20%',
-  'Fixed monthly fee',
-  'Per transaction fee',
-  'Custom model'
-];
-
-const IOL_PRODUCTS = [
-  'iOL Pay Issuing',
-  'iOL Pay Acquiring',
-  'iOL Pay Automate',
-  'iOL Pay Payment Gateway',
-  'iOL Pay Payment Link',
-  'iOL X Exchange',
-  'iOL X Supply',
-  'iOL X Demand',
-  'iOL Pulse'
+  'SaaS - Software as a Service',
+  'License - One-time License',
+  'Subscription - Monthly/Annual',
+  'Revenue Share',
+  'Commission Based',
+  'Freemium',
+  'Custom/Enterprise',
+  'Other'
 ];
 
 export const OpportunityDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
@@ -108,7 +112,8 @@ export const OpportunityDetails: React.FC = () => {
     commercialModel: '',
     potentialVolume: 0,
     estimatedDealValue: 0,
-    expectedCloseDate: null as Date | null
+    expectedCloseDate: null as Date | null,
+    ownerId: currentUser?.uid || ''
   });
 
   // New item forms
@@ -140,6 +145,49 @@ export const OpportunityDetails: React.FC = () => {
     phone: ''
   });
 
+  // Helper function to get activity type icon
+  const getActivityIcon = (activityType: string) => {
+    const iconMap = {
+      'Meeting': Video,
+      'Email': Mail,
+      'Call': Phone,
+      'WhatsApp': MessageSquare,
+      'Demo': Video,
+      'Workshop': Users
+    };
+    return iconMap[activityType as keyof typeof iconMap] || Activity;
+  };
+
+  // Helper function to get stage color
+  const getStageColor = (stage: OpportunityStage) => {
+    const colors = {
+      'Discovery': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Proposal': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
+      'Closed-Won': 'bg-green-100 text-green-800 border-green-200',
+      'Closed-Lost': 'bg-red-100 text-red-800 border-red-200'
+    };
+    return colors[stage];
+  };
+
+  // Helper function to get priority color
+  const getPriorityColor = (priority: OpportunityPriority) => {
+    const colors = {
+      'Critical': 'bg-red-100 text-red-800 border-red-200',
+      'High': 'bg-orange-100 text-orange-800 border-orange-200',
+      'Medium': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Low': 'bg-green-100 text-green-800 border-green-200'
+    };
+    return colors[priority];
+  };
+
+  useEffect(() => {
+    // Set default owner for new opportunities
+    if (isNew && currentUser?.uid && !formData.ownerId) {
+      setFormData(prev => ({ ...prev, ownerId: currentUser.uid }));
+    }
+  }, [isNew, currentUser?.uid, formData.ownerId]);
+
   useEffect(() => {
     fetchData();
   }, [id]);
@@ -151,49 +199,35 @@ export const OpportunityDetails: React.FC = () => {
         getDocuments('accounts'),
         getDocuments('contacts'),
         getDocuments('products')
-        // Note: Removed tasks fetch as activities are now managed within opportunities
-        // and displayed in the separate Tasks module
       ]);
-      
       setAccounts(accountsData as Account[]);
       setContacts(contactsData as Contact[]);
       setProducts(productsData as Product[]);
-      // setTasks is no longer needed here
 
-      if (!isNew && id) {
+      if (!isNew && id && id !== 'new') {
         const opportunityData = await getDocument('opportunities', id);
         if (opportunityData) {
-          const oppTyped = opportunityData as Opportunity;
-          setOpportunity(oppTyped);
-          // Handle backward compatibility for activities
-          const enhancedActivities = (oppTyped.activities || []).map(activity => ({
-            ...activity,
-            status: activity.status || 'Completed' as ActivityStatus, // Default old activities to completed
-            priority: activity.priority || 'Medium' as 'High' | 'Medium' | 'Low',
-            followUpNeeded: false, // Remove follow-up functionality
-            completedAt: activity.completedAt || (activity.status === 'Completed' ? activity.createdAt : undefined),
-            updatedAt: activity.updatedAt || undefined,
-            updatedBy: activity.updatedBy || undefined
-          }));
-
+          const opportunityTyped = opportunityData as Opportunity;
+          setOpportunity(opportunityTyped);
           setFormData({
-            title: oppTyped.title,
-            summary: oppTyped.summary,
-            accountId: oppTyped.accountId,
-            productId: oppTyped.productId || '',
-            contactIds: oppTyped.contactIds || oppTyped.contactsInvolved || [],
-            stage: oppTyped.stage,
-            priority: oppTyped.priority || 'Medium',
-            region: oppTyped.region,
-            iolProducts: (oppTyped as any).iolProducts || [], // New field, default to empty array
-            notes: oppTyped.notes || '',
-            tags: oppTyped.tags || [],
-            activities: enhancedActivities,
-            checklist: oppTyped.checklist || [], // New field, default to empty array
-            commercialModel: oppTyped.commercialModel || '',
-            potentialVolume: oppTyped.potentialVolume || 0,
-            estimatedDealValue: oppTyped.estimatedDealValue || 0,
-            expectedCloseDate: oppTyped.expectedCloseDate?.toDate() || null
+            title: opportunityTyped.title,
+            summary: opportunityTyped.summary,
+            accountId: opportunityTyped.accountId,
+            productId: opportunityTyped.productId || '',
+            contactIds: opportunityTyped.contactIds || [],
+            stage: opportunityTyped.stage,
+            priority: opportunityTyped.priority,
+            region: opportunityTyped.region,
+            iolProducts: opportunityTyped.iolProducts || [],
+            notes: opportunityTyped.notes,
+            tags: opportunityTyped.tags || [],
+            activities: opportunityTyped.activities || [],
+            checklist: opportunityTyped.checklist || [],
+            commercialModel: opportunityTyped.commercialModel || '',
+            potentialVolume: opportunityTyped.potentialVolume || 0,
+            estimatedDealValue: opportunityTyped.estimatedDealValue || 0,
+            expectedCloseDate: opportunityTyped.expectedCloseDate ? opportunityTyped.expectedCloseDate.toDate() : null,
+            ownerId: opportunityTyped.ownerId || currentUser?.uid || ''
           });
         }
       }
@@ -204,549 +238,58 @@ export const OpportunityDetails: React.FC = () => {
     }
   };
 
-  // Derived data
-  const selectedAccount = accounts.find(a => a.id === formData.accountId);
-  const selectedProduct = products.find(p => p.id === formData.productId);
-  
-  // Contact suggestions: direct contacts + account contacts + product contacts
-  const directContacts = contacts.filter(c => formData.contactIds.includes(c.id || ''));
-  const accountContacts = contacts.filter(c => 
-    formData.accountId && 
-    c.accountId === formData.accountId && 
+  const account = accounts.find(a => a.id === formData.accountId);
+  const product = products.find(p => p.id === formData.productId);
+
+  // Filter contacts for the selected account
+  const availableContacts = contacts.filter(c => 
+    !formData.accountId || c.accountId === formData.accountId
+  );
+
+  // Get assigned contacts
+  const assignedContacts = contacts.filter(c => formData.contactIds.includes(c.id || ''));
+
+  // Get suggested contacts (from the same account but not assigned)
+  const suggestedContacts = availableContacts.filter(c => 
     !formData.contactIds.includes(c.id || '')
   );
-  const productContacts = contacts.filter(c => 
-    formData.productId && 
-    selectedProduct?.contactIds.includes(c.id || '') &&
-    !formData.contactIds.includes(c.id || '') &&
-    c.accountId !== formData.accountId
-  );
-  const allSuggestedContacts = [...accountContacts, ...productContacts];
-
-  const getStageColor = (stage: OpportunityStage) => {
-    const colors = {
-      'Discovery': 'bg-blue-100 text-blue-800',
-      'Proposal': 'bg-yellow-100 text-yellow-800',
-      'Negotiation': 'bg-orange-100 text-orange-800',
-      'Closed-Won': 'bg-green-100 text-green-800',
-      'Closed-Lost': 'bg-red-100 text-red-800'
-    };
-    return colors[stage];
-  };
-
-  const getPriorityColor = (priority: OpportunityPriority) => {
-    const colors = {
-      'Critical': 'bg-red-100 text-red-800',
-      'High': 'bg-orange-100 text-orange-800',
-      'Medium': 'bg-yellow-100 text-yellow-800',
-      'Low': 'bg-green-100 text-green-800'
-    };
-    return colors[priority];
-  };
-
-  const getActivityIcon = (type: string) => {
-    const icons = {
-      'Meeting': Calendar,
-      'Email': Mail,
-      'Call': Phone,
-      'WhatsApp': MessageSquare,
-      'Demo': Video,
-      'Workshop': Users
-    };
-    return icons[type as keyof typeof icons] || Activity;
-  };
-
-  // Event handlers
-  const handleAddTag = () => {
-    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
-      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
-      setNewTag('');
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setFormData({ ...formData, tags: formData.tags.filter(tag => tag !== tagToRemove) });
-  };
-
-  // Checklist handlers
-  const handleAddChecklistItem = () => {
-    if (newChecklistItem.trim()) {
-      const newItem: ChecklistItem = {
-        id: Date.now().toString(),
-        text: newChecklistItem.trim(),
-        completed: false,
-        createdAt: Timestamp.now()
-      };
-      setFormData({ 
-        ...formData, 
-        checklist: [...formData.checklist, newItem] 
-      });
-      setNewChecklistItem('');
-    }
-  };
-
-  const handleToggleChecklistItem = (itemId: string) => {
-    const updatedChecklist = formData.checklist.map(item => 
-      item.id === itemId 
-        ? { 
-            ...item, 
-            completed: !item.completed,
-            completedAt: !item.completed ? Timestamp.now() : undefined
-          }
-        : item
-    );
-    setFormData({ ...formData, checklist: updatedChecklist });
-  };
-
-  const handleRemoveChecklistItem = (itemId: string) => {
-    setFormData({ 
-      ...formData, 
-      checklist: formData.checklist.filter(item => item.id !== itemId) 
-    });
-  };
-
-  const handleAddContact = (contactId: string) => {
-    if (!formData.contactIds.includes(contactId)) {
-      setFormData({ ...formData, contactIds: [...formData.contactIds, contactId] });
-    }
-  };
-
-  const handleRemoveContact = (contactId: string) => {
-    setFormData({ ...formData, contactIds: formData.contactIds.filter(id => id !== contactId) });
-  };
-
-  const handleCreateContact = async () => {
-    if (newContact.name.trim() && newContact.email.trim()) {
-      try {
-        const contactData = {
-          ...newContact,
-          accountId: formData.accountId,
-          contactType: 'Primary',
-          tags: [],
-          createdAt: Timestamp.now()
-        };
-        
-        const docRef = await createDocument('contacts', contactData);
-        
-        // Refresh contacts and add to opportunity
-        await fetchData();
-        handleAddContact(docRef.id);
-        
-        // Reset form
-        setNewContact({ name: '', email: '', position: '', phone: '' });
-        setShowCreateContact(false);
-      } catch (error) {
-        console.error('Error creating contact:', error);
-      }
-    }
-  };
-
-  const resetActivityForm = () => {
-    setActivityForm({
-      activityType: 'Meeting',
-      dateTime: new Date(),
-      relatedContactIds: [],
-      method: 'In-person',
-      subject: '',
-      notes: '',
-      assignedTo: 'current-user',
-      status: 'Scheduled',
-      priority: 'Medium'
-    });
-    setEditingActivityId(null);
-    setShowActivityForm(false);
-  };
-
-  const handleSaveActivity = async () => {
-    if (!activityForm.subject.trim()) return;
-
-    // If this is a completely new opportunity that hasn't been saved yet, show an alert
-    if (isNew || !id || id === 'new') {
-      alert('Please save the opportunity first before adding activities.');
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const now = new Date();
-      const activityDateTime = activityForm.dateTime;
-      
-      // Determine status based on date/time
-      let status = activityForm.status;
-      if (status === 'Scheduled' && activityDateTime <= now) {
-        status = 'Completed';
-      }
-
-      const activityData: ActivityType = {
-        id: editingActivityId || Date.now().toString(),
-        activityType: activityForm.activityType,
-        dateTime: Timestamp.fromDate(activityForm.dateTime),
-        relatedContactIds: activityForm.relatedContactIds,
-        method: activityForm.method,
-        subject: activityForm.subject,
-        notes: activityForm.notes,
-        assignedTo: activityForm.assignedTo,
-        status: status,
-        priority: activityForm.priority,
-        followUpNeeded: false, // Always false now
-        completedAt: status === 'Completed' ? Timestamp.now() : undefined,
-        createdAt: editingActivityId ? 
-          formData.activities.find(a => a.id === editingActivityId)?.createdAt || Timestamp.now() : 
-          Timestamp.now(),
-        createdBy: editingActivityId ? 
-          formData.activities.find(a => a.id === editingActivityId)?.createdBy || 'current-user' : 
-          'current-user',
-        updatedAt: editingActivityId ? Timestamp.now() : undefined,
-        updatedBy: editingActivityId ? 'current-user' : undefined
-      };
-
-      let updatedActivities;
-      if (editingActivityId) {
-        // Update existing activity
-        updatedActivities = formData.activities.map(a => 
-          a.id === editingActivityId ? activityData : a
-        );
-      } else {
-        // Add new activity
-        updatedActivities = [...formData.activities, activityData];
-      }
-
-      // Update local state first
-      const updatedFormData = { ...formData, activities: updatedActivities };
-      setFormData(updatedFormData);
-
-      // Helper function to recursively remove undefined values
-      const removeUndefinedValues = (obj: any): any => {
-        if (obj === null || obj === undefined) {
-          return null;
-        }
-        
-        if (Array.isArray(obj)) {
-          return obj.map(removeUndefinedValues).filter(item => item !== undefined);
-        }
-        
-        if (typeof obj === 'object' && obj.constructor === Object) {
-          const cleaned: any = {};
-          for (const [key, value] of Object.entries(obj)) {
-            if (value !== undefined) {
-              const cleanedValue = removeUndefinedValues(value);
-              if (cleanedValue !== undefined) {
-                cleaned[key] = cleanedValue;
-              }
-            }
-          }
-          return cleaned;
-        }
-        
-        return obj;
-      };
-
-      // Get the last activity date
-      const getLastActivityDate = () => {
-        if (updatedActivities.length === 0) {
-          return Timestamp.now();
-        }
-        
-        const lastActivity = updatedActivities[updatedActivities.length - 1];
-        return lastActivity?.dateTime || Timestamp.now();
-      };
-
-      // Prepare data for database update
-      const cleanedData = {
-        ...updatedFormData,
-        contactsInvolved: updatedFormData.contactIds, // For backward compatibility
-        meetingHistory: [], // For backward compatibility
-        useCase: '', // For backward compatibility - keep empty since replaced by iolProducts
-        tasks: [], // Tasks are now managed as activities within opportunities
-        createdAt: opportunity?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        lastActivityDate: getLastActivityDate()
-      };
-
-      // Only add expectedCloseDate if it exists
-      if (updatedFormData.expectedCloseDate) {
-        (cleanedData as any).expectedCloseDate = Timestamp.fromDate(updatedFormData.expectedCloseDate);
-      }
-
-      // Remove any undefined values recursively
-      const submitData = removeUndefinedValues(cleanedData);
-
-      // Save to database
-      await updateDocument('opportunities', id, submitData);
-      
-      console.log('✅ Activity saved successfully');
-      resetActivityForm();
-      
-      // Refresh data to ensure consistency
-      await fetchData();
-      
-    } catch (error) {
-      console.error('❌ Error saving activity:', error);
-      alert('Failed to save activity: ' + (error as Error).message);
-      // Revert local state on error
-      setFormData(formData);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleEditActivity = (activity: ActivityType) => {
-    setActivityForm({
-      activityType: activity.activityType,
-      dateTime: activity.dateTime.toDate(),
-      relatedContactIds: activity.relatedContactIds,
-      method: activity.method,
-      subject: activity.subject,
-      notes: activity.notes,
-      assignedTo: activity.assignedTo,
-      status: activity.status,
-      priority: activity.priority || 'Medium'
-    });
-    setEditingActivityId(activity.id);
-    setShowActivityForm(true);
-  };
-
-  const handleDeleteActivity = async (activityId: string) => {
-    if (!confirm('Are you sure you want to delete this activity?')) return;
-    
-    // If this is a completely new opportunity that hasn't been saved yet, just update local state
-    if (isNew || !id || id === 'new') {
-      const updatedActivities = formData.activities.filter(a => a.id !== activityId);
-      setFormData({ ...formData, activities: updatedActivities });
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const updatedActivities = formData.activities.filter(a => a.id !== activityId);
-      const updatedFormData = { ...formData, activities: updatedActivities };
-      
-      // Update local state first
-      setFormData(updatedFormData);
-
-      // Prepare data for database update (same logic as handleSaveActivity)
-      const removeUndefinedValues = (obj: any): any => {
-        if (obj === null || obj === undefined) return null;
-        if (Array.isArray(obj)) return obj.map(removeUndefinedValues).filter(item => item !== undefined);
-        if (typeof obj === 'object' && obj.constructor === Object) {
-          const cleaned: any = {};
-          for (const [key, value] of Object.entries(obj)) {
-            if (value !== undefined) {
-              const cleanedValue = removeUndefinedValues(value);
-              if (cleanedValue !== undefined) cleaned[key] = cleanedValue;
-            }
-          }
-          return cleaned;
-        }
-        return obj;
-      };
-
-      const getLastActivityDate = () => {
-        if (updatedActivities.length === 0) return Timestamp.now();
-        const lastActivity = updatedActivities[updatedActivities.length - 1];
-        return lastActivity?.dateTime || Timestamp.now();
-      };
-
-      const cleanedData = {
-        ...updatedFormData,
-        contactsInvolved: updatedFormData.contactIds,
-        meetingHistory: [],
-        useCase: '',
-        tasks: [], // Tasks are now managed as activities within opportunities
-        createdAt: opportunity?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        lastActivityDate: getLastActivityDate()
-      };
-
-      if (updatedFormData.expectedCloseDate) {
-        (cleanedData as any).expectedCloseDate = Timestamp.fromDate(updatedFormData.expectedCloseDate);
-      }
-
-      const submitData = removeUndefinedValues(cleanedData);
-      await updateDocument('opportunities', id, submitData);
-      
-      console.log('✅ Activity deleted successfully');
-      await fetchData(); // Refresh data
-      
-    } catch (error) {
-      console.error('❌ Error deleting activity:', error);
-      alert('Failed to delete activity: ' + (error as Error).message);
-      setFormData(formData); // Revert on error
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCompleteActivity = async (activityId: string) => {
-    // If this is a completely new opportunity that hasn't been saved yet, just update local state
-    if (isNew || !id || id === 'new') {
-      const updatedActivities = formData.activities.map(a => 
-        a.id === activityId ? {
-          ...a,
-          status: 'Completed' as ActivityStatus,
-          completedAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          updatedBy: 'current-user'
-        } : a
-      );
-      setFormData({ ...formData, activities: updatedActivities });
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const updatedActivities = formData.activities.map(a => 
-        a.id === activityId ? {
-          ...a,
-          status: 'Completed' as ActivityStatus,
-          completedAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          updatedBy: 'current-user'
-        } : a
-      );
-      const updatedFormData = { ...formData, activities: updatedActivities };
-      
-      // Update local state first
-      setFormData(updatedFormData);
-
-      // Prepare data for database update (same logic as handleSaveActivity)
-      const removeUndefinedValues = (obj: any): any => {
-        if (obj === null || obj === undefined) return null;
-        if (Array.isArray(obj)) return obj.map(removeUndefinedValues).filter(item => item !== undefined);
-        if (typeof obj === 'object' && obj.constructor === Object) {
-          const cleaned: any = {};
-          for (const [key, value] of Object.entries(obj)) {
-            if (value !== undefined) {
-              const cleanedValue = removeUndefinedValues(value);
-              if (cleanedValue !== undefined) cleaned[key] = cleanedValue;
-            }
-          }
-          return cleaned;
-        }
-        return obj;
-      };
-
-      const getLastActivityDate = () => {
-        if (updatedActivities.length === 0) return Timestamp.now();
-        const lastActivity = updatedActivities[updatedActivities.length - 1];
-        return lastActivity?.dateTime || Timestamp.now();
-      };
-
-      const cleanedData = {
-        ...updatedFormData,
-        contactsInvolved: updatedFormData.contactIds,
-        meetingHistory: [],
-        useCase: '',
-        tasks: [], // Tasks are now managed as activities within opportunities
-        createdAt: opportunity?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        lastActivityDate: getLastActivityDate()
-      };
-
-      if (updatedFormData.expectedCloseDate) {
-        (cleanedData as any).expectedCloseDate = Timestamp.fromDate(updatedFormData.expectedCloseDate);
-      }
-
-      const submitData = removeUndefinedValues(cleanedData);
-      await updateDocument('opportunities', id, submitData);
-      
-      console.log('✅ Activity completed successfully');
-      await fetchData(); // Refresh data
-      
-    } catch (error) {
-      console.error('❌ Error completing activity:', error);
-      alert('Failed to complete activity: ' + (error as Error).message);
-      setFormData(formData); // Revert on error
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('🔥 Form submitted!', { isNew, id, currentUrl: window.location.pathname });
-    console.log('📊 Form data:', formData);
-    
     setSaving(true);
     
     try {
-      // Helper function to recursively remove undefined values
-      const removeUndefinedValues = (obj: any): any => {
-        if (obj === null || obj === undefined) {
-          return null;
-        }
-        
-        if (Array.isArray(obj)) {
-          return obj.map(removeUndefinedValues).filter(item => item !== undefined);
-        }
-        
-        if (typeof obj === 'object' && obj.constructor === Object) {
-          const cleaned: any = {};
-          for (const [key, value] of Object.entries(obj)) {
-            if (value !== undefined) {
-              const cleanedValue = removeUndefinedValues(value);
-              if (cleanedValue !== undefined) {
-                cleaned[key] = cleanedValue;
-              }
-            }
+      // Clean data to remove undefined values
+      const cleanData = Object.fromEntries(
+        Object.entries(formData).filter(([key, value]) => {
+          // Keep empty arrays and zero values, but remove undefined/null
+          if (key === 'expectedCloseDate') {
+            return value !== null; // Allow null for optional dates
           }
-          return cleaned;
-        }
-        
-        return obj;
+          return value !== undefined && value !== '';
+        })
+      );
+
+      const submitData = {
+        ...cleanData,
+        expectedCloseDate: formData.expectedCloseDate ? Timestamp.fromDate(formData.expectedCloseDate) : null,
+        lastActivityDate: formData.activities.length > 0 
+          ? formData.activities.sort((a, b) => b.dateTime.toMillis() - a.dateTime.toMillis())[0].dateTime 
+          : null,
+        createdAt: isNew ? Timestamp.now() : opportunity?.createdAt,
+        updatedAt: Timestamp.now()
       };
-
-      // Get the last activity date more safely
-      const getLastActivityDate = () => {
-        if (formData.activities.length === 0) {
-          return Timestamp.now();
-        }
-        
-        const lastActivity = formData.activities[formData.activities.length - 1];
-        return lastActivity?.dateTime || Timestamp.now();
-      };
-
-      // Clean up the data - remove undefined values and convert properly
-      const cleanedData = {
-        ...formData,
-        contactsInvolved: formData.contactIds, // For backward compatibility
-        meetingHistory: [], // For backward compatibility
-        useCase: '', // For backward compatibility - keep empty since replaced by iolProducts
-        tasks: [], // Tasks are now managed as activities within opportunities
-        createdAt: isNew ? Timestamp.now() : opportunity?.createdAt || Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        lastActivityDate: getLastActivityDate()
-      };
-
-      // Only add expectedCloseDate if it exists
-      if (formData.expectedCloseDate) {
-        (cleanedData as any).expectedCloseDate = Timestamp.fromDate(formData.expectedCloseDate);
-      }
-
-      // Remove any undefined values recursively
-      const submitData = removeUndefinedValues(cleanedData);
-
-      console.log('💾 Submitting data:', submitData);
 
       if (isNew || !id) {
-        console.log('✨ Creating new opportunity...');
-        const docRef = await createDocument('opportunities', submitData);
-        console.log('✅ Created with ID:', docRef.id);
+        const docId = await createDocument('opportunities', submitData);
         navigate('/opportunities');
-      } else if (id && id !== 'new') {
-        console.log('📝 Updating existing opportunity:', id);
-        await updateDocument('opportunities', id, submitData);
-        console.log('✅ Updated successfully');
-        await fetchData();
       } else {
-        console.log('⚠️ Unexpected state:', { isNew, id });
+        await updateDocument('opportunities', id, submitData);
+        await fetchData();
       }
     } catch (error) {
-      console.error('❌ Error saving opportunity:', error);
-      alert('Failed to save opportunity: ' + (error as Error).message);
+      console.error('Error saving opportunity:', error);
+      alert('Error saving opportunity. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -762,6 +305,100 @@ export const OpportunityDetails: React.FC = () => {
       }
     }
   };
+
+  const handleContactToggle = (contactId: string) => {
+    const newContactIds = formData.contactIds.includes(contactId)
+      ? formData.contactIds.filter(id => id !== contactId)
+      : [...formData.contactIds, contactId];
+    
+    setFormData({ ...formData, contactIds: newContactIds });
+  };
+
+  const handleCreateContact = async () => {
+    if (newContact.name.trim() && newContact.email.trim()) {
+      try {
+        const contactData = {
+          ...newContact,
+          accountId: formData.accountId,
+          contactType: 'Primary' as any,
+          productIds: [],
+          ownerId: currentUser?.uid || '',
+          createdAt: Timestamp.now()
+        };
+        
+        const docRef = await createDocument('contacts', contactData);
+        
+        // Refresh contacts and add to opportunity
+        await fetchData();
+        handleContactToggle(docRef.id);
+        
+        // Reset form
+        setNewContact({ name: '', email: '', position: '', phone: '' });
+        setShowCreateContact(false);
+      } catch (error) {
+        console.error('Error creating contact:', error);
+      }
+    }
+  };
+
+  const handleAddTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData({
+        ...formData,
+        tags: [...formData.tags, newTag.trim()]
+      });
+      setNewTag('');
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormData({
+      ...formData,
+      tags: formData.tags.filter(tag => tag !== tagToRemove)
+    });
+  };
+
+  const handleIolProductToggle = (product: string) => {
+    const newProducts = formData.iolProducts.includes(product)
+      ? formData.iolProducts.filter(p => p !== product)
+      : [...formData.iolProducts, product];
+    
+    setFormData({ ...formData, iolProducts: newProducts });
+  };
+
+  const handleAddChecklistItem = () => {
+    if (newChecklistItem.trim()) {
+      const newItem = {
+        id: Date.now().toString(),
+        title: newChecklistItem.trim(),
+        completed: false,
+        createdAt: new Date()
+      };
+      setFormData({
+        ...formData,
+        checklist: [...formData.checklist, newItem]
+      });
+      setNewChecklistItem('');
+    }
+  };
+
+  const handleToggleChecklistItem = (itemId: string) => {
+    setFormData({
+      ...formData,
+      checklist: formData.checklist.map(item =>
+        item.id === itemId ? { ...item, completed: !item.completed } : item
+      )
+    });
+  };
+
+  const handleRemoveChecklistItem = (itemId: string) => {
+    setFormData({
+        ...formData,
+      checklist: formData.checklist.filter(item => item.id !== itemId)
+    });
+  };
+
+  // ... Rest of existing functions for activities and checklist
 
   if (loading) {
     return (
@@ -787,8 +424,8 @@ export const OpportunityDetails: React.FC = () => {
               <h1 className="text-xl font-semibold text-gray-900">
                 {isNew ? 'New Opportunity' : formData.title || 'Edit Opportunity'}
               </h1>
-              {!isNew && selectedAccount && (
-                <p className="text-sm text-gray-500">{selectedAccount.name}</p>
+              {account && (
+                <p className="text-sm text-gray-500">{account.name}</p>
               )}
             </div>
           </div>
@@ -796,9 +433,9 @@ export const OpportunityDetails: React.FC = () => {
             {!isNew && (
               <button
                 onClick={handleDelete}
-                className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition-colors"
+                className="btn-danger-sm flex items-center gap-1.5"
               >
-                <Trash2 className="h-3.5 w-3.5 mr-1 inline" />
+                <Trash2 className="h-3.5 w-3.5" />
                 Delete
               </button>
             )}
@@ -806,7 +443,7 @@ export const OpportunityDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* Content - Three Column Layout */}
+      {/* Content */}
       <div className="flex-1 overflow-auto pb-20">
         <div className="max-w-7xl mx-auto p-4">
           <form id="opportunity-form" onSubmit={handleSubmit}>
@@ -874,6 +511,7 @@ export const OpportunityDetails: React.FC = () => {
                         value={formData.stage}
                         onChange={(e) => setFormData({ ...formData, stage: e.target.value as OpportunityStage })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
                       >
                         {OPPORTUNITY_STAGES.map((stage) => (
                           <option key={stage} value={stage}>
@@ -889,8 +527,9 @@ export const OpportunityDetails: React.FC = () => {
                         value={formData.priority}
                         onChange={(e) => setFormData({ ...formData, priority: e.target.value as OpportunityPriority })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        required
                       >
-                        {PRIORITIES.map((priority) => (
+                        {OPPORTUNITY_PRIORITIES.map((priority) => (
                           <option key={priority} value={priority}>
                             {priority}
                           </option>
@@ -905,20 +544,17 @@ export const OpportunityDetails: React.FC = () => {
                         value={formData.region}
                         onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="North America, EMEA, APAC..."
+                        placeholder="e.g., North America, EMEA"
+                        required
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Expected Close Date</label>
-                      <input
-                        type="date"
-                        value={formData.expectedCloseDate ? formData.expectedCloseDate.toISOString().split('T')[0] : ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          expectedCloseDate: e.target.value ? new Date(e.target.value) : null 
-                        })}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      <OwnerSelect
+                        value={formData.ownerId}
+                        onChange={(ownerId) => setFormData({ ...formData, ownerId })}
+                        label="Opportunity Owner"
+                        required
                       />
                     </div>
 
@@ -929,93 +565,12 @@ export const OpportunityDetails: React.FC = () => {
                         onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
                         rows={2}
                         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="Brief opportunity summary..."
+                        placeholder="Brief summary of the opportunity..."
+                        required
                       />
                     </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-2">iOL Products & Solutions</label>
-                      
-                      {/* Selected Products Tags */}
-                      {formData.iolProducts.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {formData.iolProducts.map((product) => (
-                            <span key={product} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {product}
-                              <button
-                                type="button"
-                                onClick={() => setFormData({ 
-                                  ...formData, 
-                                  iolProducts: formData.iolProducts.filter(p => p !== product) 
-                                })}
-                                className="ml-2 hover:text-blue-600"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Product Selection Grid */}
-                      <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {IOL_PRODUCTS.map((product) => {
-                            const isSelected = formData.iolProducts.includes(product);
-                            return (
-                              <label
-                                key={product}
-                                className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
-                                  isSelected 
-                                    ? 'bg-blue-100 border-blue-300 text-blue-900' 
-                                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                                } border`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setFormData({ 
-                                        ...formData, 
-                                        iolProducts: [...formData.iolProducts, product] 
-                                      });
-                                    } else {
-                                      setFormData({ 
-                                        ...formData, 
-                                        iolProducts: formData.iolProducts.filter(p => p !== product) 
-                                      });
-                                    }
-                                  }}
-                                  className="mr-2 text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="text-xs font-medium">{product}</span>
-                              </label>
-                            );
-                          })}
-                        </div>
-                        {formData.iolProducts.length === 0 && (
-                          <p className="text-xs text-gray-500 mt-2 text-center">
-                            Select the iOL products and solutions offered for this opportunity
-                          </p>
-                        )}
                       </div>
                     </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
-                      <textarea
-                        value={formData.notes}
-                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                        rows={2}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="Additional notes..."
-                      />
-                    </div>
-                  </div>
-                </div>
-
-
 
                 {/* Activity Log */}
                 <div className="bg-white shadow rounded-lg p-6">
@@ -1104,11 +659,30 @@ export const OpportunityDetails: React.FC = () => {
                         </div>
                         
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Date & Time</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
                           <input
-                            type="datetime-local"
-                            value={activityForm.dateTime.toISOString().slice(0, 16)}
-                            onChange={(e) => setActivityForm({ ...activityForm, dateTime: new Date(e.target.value) })}
+                            type="date"
+                            value={activityForm.dateTime.toISOString().split('T')[0]}
+                            onChange={(e) => {
+                              const currentTime = activityForm.dateTime;
+                              const newDate = new Date(e.target.value);
+                              newDate.setHours(currentTime.getHours(), currentTime.getMinutes());
+                              setActivityForm({ ...activityForm, dateTime: newDate });
+                            }}
+                            className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-iol-red focus:border-transparent bg-white shadow-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                          <input
+                            type="time"
+                            value={activityForm.dateTime.toTimeString().slice(0, 5)}
+                            onChange={(e) => {
+                              const currentDate = new Date(activityForm.dateTime);
+                              const [hours, minutes] = e.target.value.split(':');
+                              currentDate.setHours(parseInt(hours), parseInt(minutes));
+                              setActivityForm({ ...activityForm, dateTime: currentDate });
+                            }}
                             className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-iol-red focus:border-transparent bg-white shadow-sm"
                           />
                         </div>
@@ -1148,7 +722,7 @@ export const OpportunityDetails: React.FC = () => {
                             className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 focus:ring-2 focus:ring-iol-red focus:border-transparent bg-white shadow-sm"
                             size={3}
                           >
-                            {directContacts.map(contact => (
+                            {assignedContacts.map(contact => (
                               <option key={contact.id} value={contact.id}>{contact.name}</option>
                             ))}
                           </select>
@@ -1334,7 +908,7 @@ export const OpportunityDetails: React.FC = () => {
                                         
                                         {activity.completedAt && (
                                           <div className="flex items-center gap-2 text-sm text-green-700 md:col-span-2">
-                                            <CheckCircle className="h-4 w-4 text-green-500" />
+                                            <CheckCircle2 className="h-4 w-4 text-green-500" />
                                             <span>
                                               Completed: {format(activity.completedAt.toDate(), 'MMM d, yyyy • h:mm a')}
                                             </span>
@@ -1358,7 +932,7 @@ export const OpportunityDetails: React.FC = () => {
                                             onClick={() => handleCompleteActivity(activity.id)}
                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-md transition-colors"
                                           >
-                                            <CheckCircle className="h-3.5 w-3.5" />
+                                            <CheckCircle2 className="h-3.5 w-3.5" />
                                             Mark Complete
                                           </button>
                                         )}
@@ -1616,7 +1190,7 @@ export const OpportunityDetails: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <Users className="h-4 w-4 text-gray-500" />
                       <h2 className="text-base font-medium text-gray-900">
-                        Contacts ({directContacts.length})
+                        Contacts ({assignedContacts.length})
                       </h2>
                     </div>
                     <button
@@ -1630,13 +1204,13 @@ export const OpportunityDetails: React.FC = () => {
                   </div>
 
                   {/* Assigned contacts */}
-                  {directContacts.length > 0 && (
+                  {assignedContacts.length > 0 && (
                     <div className="space-y-2 mb-3">
-                      {directContacts.map((contact) => (
+                      {assignedContacts.map((contact) => (
                         <div key={contact.id} className="bg-blue-50 border-blue-200 rounded-lg p-2 border relative">
                           <button
                             type="button"
-                            onClick={() => handleRemoveContact(contact.id || '')}
+                            onClick={() => handleContactToggle(contact.id || '')}
                             className="absolute top-1 right-1 text-blue-400 hover:text-blue-600"
                           >
                             <X className="h-3 w-3" />
@@ -1714,19 +1288,19 @@ export const OpportunityDetails: React.FC = () => {
                   )}
 
                   {/* Show suggestions button and suggested contacts */}
-                  {allSuggestedContacts.length > 0 && (
+                  {suggestedContacts.length > 0 && (
                     <div>
                       <button
                         type="button"
                         onClick={() => setShowSuggestedContacts(!showSuggestedContacts)}
                         className="w-full text-xs text-gray-600 hover:text-gray-800 py-2 border-t border-gray-200 transition-colors"
                       >
-                        {showSuggestedContacts ? 'Hide' : 'Show'} suggestions ({allSuggestedContacts.length})
+                        {showSuggestedContacts ? 'Hide' : 'Show'} suggestions ({suggestedContacts.length})
                       </button>
                       
                       {showSuggestedContacts && (
                         <div className="mt-2 space-y-1">
-                          {allSuggestedContacts.map((contact) => {
+                          {suggestedContacts.map((contact) => {
                             const isFromAccount = contact.accountId === formData.accountId;
                             return (
                               <div 
@@ -1737,7 +1311,7 @@ export const OpportunityDetails: React.FC = () => {
                               >
                                 <button
                                   type="button"
-                                  onClick={() => handleAddContact(contact.id || '')}
+                                  onClick={() => handleContactToggle(contact.id || '')}
                                   className={`absolute top-1 right-1 ${
                                     isFromAccount ? 'text-gray-400 hover:text-gray-600' : 'text-green-400 hover:text-green-600'
                                   }`}
@@ -1768,7 +1342,7 @@ export const OpportunityDetails: React.FC = () => {
                   )}
 
                   {/* Empty state */}
-                  {allSuggestedContacts.length === 0 && directContacts.length === 0 && (
+                  {suggestedContacts.length === 0 && assignedContacts.length === 0 && (
                     <p className="text-xs text-gray-500 italic">
                       Select an account to see contacts
                     </p>

@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Task, TaskStatus, ActivityStatus } from '../types';
+import type { TaskStatus, ActivityStatus } from '../types';
 import { format } from 'date-fns';
 import { Clock, User, CheckCircle } from 'lucide-react';
 

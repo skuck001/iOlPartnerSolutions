@@ -18,6 +18,7 @@ export interface Contact {
   isDecisionMaker?: boolean;
   lastContactDate?: Timestamp;
   notes?: string;
+  ownerId: string; // User ID of the contact owner
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 } 

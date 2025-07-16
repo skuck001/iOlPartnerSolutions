@@ -15,7 +15,6 @@ import {
   Globe,
   Activity,
   MessageSquare,
-  PhoneCall,
   Video,
   Users,
   ExternalLink,
@@ -27,6 +26,8 @@ import { Timestamp } from 'firebase/firestore';
 import type { Contact, Account, Product, ContactType, Opportunity, Activity as ActivityType, ActivityStatus } from '../types';
 import { getDocument, getDocuments, createDocument, updateDocument, deleteDocument, updateContactWithSync, deleteContactWithSync } from '../lib/firestore';
 import { format, formatDistanceToNow } from 'date-fns';
+import { useAuth } from '../hooks/useAuth';
+import { OwnerSelect } from '../components/OwnerSelect';
 
 const contactTypes: ContactType[] = [
   'Primary',
@@ -42,6 +43,7 @@ const CONTACT_METHODS = ['Email', 'Phone', 'LinkedIn', 'Teams'];
 export const ContactDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
   const [contact, setContact] = useState<Contact | null>(null);
@@ -65,8 +67,16 @@ export const ContactDetails: React.FC = () => {
     timezone: '',
     preferredContactMethod: 'Email',
     isDecisionMaker: false,
-    notes: ''
+    notes: '',
+    ownerId: currentUser?.uid || ''
   });
+
+  useEffect(() => {
+    // Set default owner for new contacts
+    if (isNew && currentUser?.uid && !formData.ownerId) {
+      setFormData(prev => ({ ...prev, ownerId: currentUser.uid }));
+    }
+  }, [isNew, currentUser?.uid, formData.ownerId]);
 
   useEffect(() => {
     fetchData();
@@ -89,8 +99,23 @@ export const ContactDetails: React.FC = () => {
         if (contactData) {
           const contactTyped = contactData as Contact;
           setContact(contactTyped);
-          setFormData(contactTyped);
-          
+          setFormData({
+            name: contactTyped.name,
+            email: contactTyped.email,
+            phone: contactTyped.phone || '',
+            position: contactTyped.position || '',
+            department: contactTyped.department || '',
+            contactType: contactTyped.contactType,
+            accountId: contactTyped.accountId,
+            productIds: contactTyped.productIds || [],
+            linkedIn: contactTyped.linkedIn || '',
+            timezone: contactTyped.timezone || '',
+            preferredContactMethod: contactTyped.preferredContactMethod || 'Email',
+            isDecisionMaker: contactTyped.isDecisionMaker || false,
+            notes: contactTyped.notes || '',
+            ownerId: contactTyped.ownerId || currentUser?.uid || ''
+          });
+
           // Extract activities related to this contact
           const relatedActivities = extractContactActivities(opportunitiesData as Opportunity[], id);
           setContactActivities(relatedActivities);
@@ -139,7 +164,7 @@ export const ContactDetails: React.FC = () => {
     const iconMap = {
       'Meeting': Video,
       'Email': Mail,
-      'Call': PhoneCall,
+      'Call': Phone,
       'WhatsApp': MessageSquare,
       'Demo': Video,
       'Workshop': Users
