@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { validateData } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
+import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { TasksService, TasksQueryOptions, ActivitiesQueryOptions } from './tasks.service';
 import { z } from 'zod';
 
@@ -107,10 +108,16 @@ const UpdateChecklistItemSchema = z.object({
 // STANDALONE TASKS CLOUD FUNCTIONS
 // ============================================================================
 
-export const getTasks = onCall(async (request) => {
-  try {
-    await authenticateUser(request.auth);
-    const queryOptions = validateData(TasksQuerySchema, request.data || {}) as TasksQueryOptions;
+export const getTasks = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getTasks');
+      
+      const queryOptions = validateData(TasksQuerySchema, request.data || {}) as TasksQueryOptions;
     
     const result = await tasksService.getTasks(queryOptions);
     return { success: true, ...result };
@@ -120,9 +127,14 @@ export const getTasks = onCall(async (request) => {
   }
 });
 
-export const getTask = onCall(async (request) => {
-  try {
-    await authenticateUser(request.auth);
+export const getTask = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getTask');
     const { taskId } = request.data;
     
     if (!taskId) {
@@ -141,9 +153,14 @@ export const getTask = onCall(async (request) => {
   }
 });
 
-export const createTask = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const createTask = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'createTask');
     const taskData = validateData(CreateTaskSchema, request.data);
     
     const task = await tasksService.createTask(taskData, user.uid);
@@ -154,9 +171,14 @@ export const createTask = onCall(async (request) => {
   }
 });
 
-export const updateTask = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const updateTask = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'updateTask');
     const { taskId, ...updateData } = request.data;
     
     if (!taskId) {
@@ -173,9 +195,14 @@ export const updateTask = onCall(async (request) => {
   }
 });
 
-export const deleteTask = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const deleteTask = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'deleteTask');
     const { taskId } = request.data;
     
     if (!taskId) {
@@ -194,9 +221,14 @@ export const deleteTask = onCall(async (request) => {
 // ACTIVITY CLOUD FUNCTIONS (within opportunities)
 // ============================================================================
 
-export const getActivitiesByOpportunity = onCall(async (request) => {
-  try {
-    await authenticateUser(request.auth);
+export const getActivitiesByOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getActivitiesByOpportunity');
     const { opportunityId, ...queryOptions } = request.data;
     
     if (!opportunityId) {
@@ -213,9 +245,14 @@ export const getActivitiesByOpportunity = onCall(async (request) => {
   }
 });
 
-export const addActivityToOpportunity = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const addActivityToOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'addActivityToOpportunity');
     const { opportunityId, ...activityData } = request.data;
     
     if (!opportunityId) {
@@ -232,9 +269,14 @@ export const addActivityToOpportunity = onCall(async (request) => {
   }
 });
 
-export const updateActivityInOpportunity = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const updateActivityInOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'updateActivityInOpportunity');
     const { opportunityId, activityId, ...updateData } = request.data;
     
     if (!opportunityId || !activityId) {
@@ -251,9 +293,14 @@ export const updateActivityInOpportunity = onCall(async (request) => {
   }
 });
 
-export const deleteActivityFromOpportunity = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const deleteActivityFromOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'deleteActivityFromOpportunity');
     const { opportunityId, activityId } = request.data;
     
     if (!opportunityId || !activityId) {
@@ -272,9 +319,14 @@ export const deleteActivityFromOpportunity = onCall(async (request) => {
 // CHECKLIST CLOUD FUNCTIONS (within opportunities)
 // ============================================================================
 
-export const getChecklistByOpportunity = onCall(async (request) => {
-  try {
-    await authenticateUser(request.auth);
+export const getChecklistByOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getChecklistByOpportunity');
     const { opportunityId } = request.data;
     
     if (!opportunityId) {
@@ -289,9 +341,14 @@ export const getChecklistByOpportunity = onCall(async (request) => {
   }
 });
 
-export const addChecklistItemToOpportunity = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const addChecklistItemToOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'addChecklistItemToOpportunity');
     const { opportunityId, text } = request.data;
     
     if (!opportunityId || !text) {
@@ -306,9 +363,14 @@ export const addChecklistItemToOpportunity = onCall(async (request) => {
   }
 });
 
-export const updateChecklistItemInOpportunity = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const updateChecklistItemInOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'updateChecklistItemInOpportunity');
     const { opportunityId, itemId, ...updateData } = request.data;
     
     if (!opportunityId || !itemId) {
@@ -325,9 +387,14 @@ export const updateChecklistItemInOpportunity = onCall(async (request) => {
   }
 });
 
-export const deleteChecklistItemFromOpportunity = onCall(async (request) => {
-  try {
-    const user = await authenticateUser(request.auth);
+export const deleteChecklistItemFromOpportunity = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'deleteChecklistItemFromOpportunity');
     const { opportunityId, itemId } = request.data;
     
     if (!opportunityId || !itemId) {

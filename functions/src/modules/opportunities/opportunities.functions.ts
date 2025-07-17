@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { validateData } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
+import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { OpportunitiesService, OpportunityFilters, OpportunitiesQueryOptions } from './opportunities.service';
 import { z } from 'zod';
 
@@ -79,10 +80,13 @@ const BulkUpdateOpportunitiesSchema = z.object({
 
 // Get opportunities with filtering and pagination
 export const getOpportunities = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getOpportunities');
       const validatedData = validateData(OpportunitiesQuerySchema, request.data);
 
       const options: OpportunitiesQueryOptions = {
@@ -112,10 +116,13 @@ export const getOpportunities = onCall(
 
 // Get single opportunity
 export const getOpportunity = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getOpportunity');
       
       if (!request.data?.opportunityId) {
         throw new HttpsError('invalid-argument', 'Opportunity ID is required');
@@ -148,10 +155,13 @@ export const getOpportunity = onCall(
 
 // Create new opportunity
 export const createOpportunity = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'createOpportunity');
       const validatedData = validateData(CreateOpportunitySchema, request.data);
 
       const newOpportunity = await opportunitiesService.createOpportunity(validatedData, user.uid);
@@ -175,10 +185,13 @@ export const createOpportunity = onCall(
 
 // Update opportunity
 export const updateOpportunity = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'updateOpportunity');
       
       if (!request.data?.opportunityId) {
         throw new HttpsError('invalid-argument', 'Opportunity ID is required');
@@ -220,10 +233,13 @@ export const updateOpportunity = onCall(
 
 // Delete opportunity
 export const deleteOpportunity = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'deleteOpportunity');
       
       if (!request.data?.opportunityId) {
         throw new HttpsError('invalid-argument', 'Opportunity ID is required');
@@ -259,10 +275,13 @@ export const deleteOpportunity = onCall(
 
 // Get opportunities statistics
 export const getOpportunitiesStats = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for stats operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.stats.maxRequests, RateLimitPresets.stats.windowMs, 'getOpportunitiesStats');
       const validatedData = validateData(OpportunityFiltersSchema, request.data || {});
 
       const filters: OpportunityFilters = {
@@ -288,10 +307,13 @@ export const getOpportunitiesStats = onCall(
 
 // Bulk update opportunities
 export const bulkUpdateOpportunities = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for heavy operations (bulk updates)
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.heavy.maxRequests, RateLimitPresets.heavy.windowMs, 'bulkUpdateOpportunities');
       const validatedData = validateData(BulkUpdateOpportunitiesSchema, request.data);
 
       // Verify ownership of all opportunities

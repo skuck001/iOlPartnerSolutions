@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { validateData } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
+import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { ProductsService, ProductFilters, ProductsQueryOptions } from './products.service';
 import { z } from 'zod';
 
@@ -71,10 +72,14 @@ const BulkUpdateProductsSchema = z.object({
 
 // Get products with filtering and pagination
 export const getProducts = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getProducts');
+      
       const validatedData = validateData(ProductsQuerySchema, request.data);
 
       const options: ProductsQueryOptions = {
@@ -104,10 +109,13 @@ export const getProducts = onCall(
 
 // Get single product
 export const getProduct = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getProduct');
       
       if (!request.data?.productId) {
         throw new HttpsError('invalid-argument', 'Product ID is required');
@@ -140,10 +148,13 @@ export const getProduct = onCall(
 
 // Create new product
 export const createProduct = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'createProduct');
       const validatedData = validateData(CreateProductSchema, request.data);
 
       const newProduct = await productsService.createProduct(validatedData, user.uid);
@@ -167,10 +178,13 @@ export const createProduct = onCall(
 
 // Update product
 export const updateProduct = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'updateProduct');
       
       if (!request.data?.productId) {
         throw new HttpsError('invalid-argument', 'Product ID is required');
@@ -212,10 +226,13 @@ export const updateProduct = onCall(
 
 // Delete product
 export const deleteProduct = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'deleteProduct');
       
       if (!request.data?.productId) {
         throw new HttpsError('invalid-argument', 'Product ID is required');
@@ -251,10 +268,13 @@ export const deleteProduct = onCall(
 
 // Get products statistics
 export const getProductsStats = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for stats operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.stats.maxRequests, RateLimitPresets.stats.windowMs, 'getProductsStats');
       const validatedData = validateData(ProductFiltersSchema, request.data || {});
 
       const filters: ProductFilters = {
@@ -280,10 +300,13 @@ export const getProductsStats = onCall(
 
 // Bulk update products
 export const bulkUpdateProducts = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for heavy operations (bulk updates)
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.heavy.maxRequests, RateLimitPresets.heavy.windowMs, 'bulkUpdateProducts');
       const validatedData = validateData(BulkUpdateProductsSchema, request.data);
 
       // Verify ownership of all products

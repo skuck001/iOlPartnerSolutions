@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { validateData } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
+import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { ContactsService, ContactFilters, ContactsQueryOptions } from './contacts.service';
 import { z } from 'zod';
 
@@ -67,10 +68,14 @@ const BulkUpdateContactsSchema = z.object({
 
 // Get contacts with filtering and pagination
 export const getContacts = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getContacts');
+      
       const validatedData = validateData(ContactsQuerySchema, request.data);
 
       const options: ContactsQueryOptions = {
@@ -100,10 +105,13 @@ export const getContacts = onCall(
 
 // Get single contact
 export const getContact = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for read operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getContact');
       
       if (!request.data?.contactId) {
         throw new HttpsError('invalid-argument', 'Contact ID is required');
@@ -136,10 +144,13 @@ export const getContact = onCall(
 
 // Create new contact
 export const createContact = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'createContact');
       const validatedData = validateData(CreateContactSchema, request.data);
 
       const newContact = await contactsService.createContact(validatedData, user.uid);
@@ -163,10 +174,13 @@ export const createContact = onCall(
 
 // Update contact
 export const updateContact = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'updateContact');
       
       if (!request.data?.contactId) {
         throw new HttpsError('invalid-argument', 'Contact ID is required');
@@ -208,10 +222,13 @@ export const updateContact = onCall(
 
 // Delete contact
 export const deleteContact = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for write operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.write.maxRequests, RateLimitPresets.write.windowMs, 'deleteContact');
       
       if (!request.data?.contactId) {
         throw new HttpsError('invalid-argument', 'Contact ID is required');
@@ -247,10 +264,13 @@ export const deleteContact = onCall(
 
 // Get contacts statistics
 export const getContactsStats = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for stats operations
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.stats.maxRequests, RateLimitPresets.stats.windowMs, 'getContactsStats');
       const validatedData = validateData(ContactFiltersSchema, request.data || {});
 
       const filters: ContactFilters = {
@@ -276,10 +296,14 @@ export const getContactsStats = onCall(
 
 // Bulk update contacts
 export const bulkUpdateContacts = onCall(
-  { cors: true },
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
   async (request) => {
     try {
       const user = await authenticateUser(request.auth);
+      
+      // Apply rate limiting for heavy operations (bulk updates)
+      await RateLimiter.checkLimit(user.uid, RateLimitPresets.heavy.maxRequests, RateLimitPresets.heavy.windowMs, 'bulkUpdateContacts');
+      
       const validatedData = validateData(BulkUpdateContactsSchema, request.data);
 
       // Verify ownership of all contacts
