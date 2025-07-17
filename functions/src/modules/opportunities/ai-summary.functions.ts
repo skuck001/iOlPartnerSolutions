@@ -6,8 +6,9 @@ import { OpportunitiesService } from './opportunities.service';
 import { getFirestore } from 'firebase-admin/firestore';
 import { defineSecret } from 'firebase-functions/params';
 
-// Define the Google AI API key as a secret
+// Define the AI API keys as secrets
 const googleAiApiKey = defineSecret('GOOGLE_AI_API_KEY');
+const openaiApiKey = defineSecret('OPENAI_API_KEY');
 
 // Lazy initialization variables
 let opportunitiesService: OpportunitiesService | null = null;
@@ -36,7 +37,7 @@ export const generateOpportunitySummaryManualV2 = onCall({
   cors: ['http://localhost:5173', 'https://localhost:5173', 'http://127.0.0.1:5173', 'https://iol-partner-solutions.web.app', 'https://iol-partner-solutions.firebaseapp.com'],
   maxInstances: 10,
   memory: '256MiB',
-  secrets: [googleAiApiKey],
+  secrets: [googleAiApiKey, openaiApiKey],
 }, async (request) => {
   const startTime = Date.now();
   console.log('🚀 AI Summary Function V2 Started');

@@ -1,15 +1,22 @@
 import { Opportunity } from '../../types';
 import { Timestamp } from 'firebase-admin/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
 import { defineSecret } from 'firebase-functions/params';
 
-// Define the Google AI API key as a secret
+// Define the AI API keys as secrets
 const googleAiApiKey = defineSecret('GOOGLE_AI_API_KEY');
+const openaiApiKey = defineSecret('OPENAI_API_KEY');
+
+// AI Provider Configuration - Uncomment the one you want to use
+const AI_PROVIDER = 'openai'; // 'google' or 'openai'
+// const AI_PROVIDER = 'google'; // 'google' or 'openai'
 
 export class AISummaryService {
   
   async generateExecutiveSummary(opportunity: Opportunity): Promise<string> {
     console.log('🧠 AISummaryService: Starting AI executive summary generation');
+    console.log('🤖 Using AI Provider:', AI_PROVIDER.toUpperCase());
     console.log('📋 Opportunity details:', {
       id: opportunity.id,
       title: opportunity.title,
@@ -19,7 +26,7 @@ export class AISummaryService {
     });
 
     try {
-      console.log('🤖 Generating AI summary with Google Gemini...');
+      console.log(`🤖 Generating AI summary with ${AI_PROVIDER.toUpperCase()}...`);
       const summary = await this.generateAISummary(opportunity);
       console.log('✅ AI summary generated successfully');
       return summary;
@@ -32,7 +39,91 @@ export class AISummaryService {
   private async generateAISummary(opportunity: Opportunity): Promise<string> {
     console.log('🔍 Analyzing opportunity data for AI generation...');
     
-    // Check if API key is available from environment variable
+    // Format opportunity data for AI prompt
+    const opportunityContext = this.buildOpportunityContext(opportunity);
+    
+    // Executive AI prompt with your exact instructions
+    const aiPrompt = `Generate a concise, professional 2-sentence status update for executive leadership based on opportunity records in a CRM. The company is iOL, so there is no need to explain its services or value proposition. Use a clear, human tone—no fluff, no sales language, no unnecessary background. Only mention agreements if they have explicitly been made; otherwise, refer to them as discussions, proposals, or concepts. Focus strictly on what has already happened (e.g., meetings, discussions, milestones) and what the current standing is. Summarize the latest status and past activities accurately and succinctly.
+
+OPPORTUNITY DATA:
+${opportunityContext}`;
+
+    console.log('🤖 AI Prompt prepared:', {
+      promptLength: aiPrompt.length,
+      contextLines: opportunityContext.split('\n').length
+    });
+    
+    console.log('📋 FULL AI PROMPT - START');
+    console.log('='.repeat(50));
+    
+    // Break prompt into chunks to avoid log truncation
+    const promptChunks = aiPrompt.match(/.{1,800}/g) || [aiPrompt];
+    promptChunks.forEach((chunk, index) => {
+      console.log(`📋 PROMPT CHUNK ${index + 1}/${promptChunks.length}:`);
+      console.log(chunk);
+      console.log('---');
+    });
+    
+    console.log('📋 FULL AI PROMPT - END');
+    console.log('='.repeat(50));
+
+    // Route to the appropriate AI provider
+    if (AI_PROVIDER === 'openai') {
+      return await this.generateOpenAISummary(aiPrompt);
+    } else {
+      return await this.generateGoogleAISummary(aiPrompt);
+    }
+  }
+
+  private async generateOpenAISummary(prompt: string): Promise<string> {
+    console.log('🚀 Calling OpenAI ChatGPT-4o...');
+    
+    // Check if API key is available
+    const apiKey = openaiApiKey.value();
+    if (!apiKey) {
+      throw new Error('OpenAI API key not configured. Please set the OPENAI_API_KEY environment variable.');
+    }
+
+    // Initialize OpenAI
+    const openai = new OpenAI({
+      apiKey: apiKey,
+    });
+
+    try {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o", // ChatGPT-4o model
+        messages: [
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 1000,
+        temperature: 0.7,
+      });
+
+      const aiSummary = completion.choices[0]?.message?.content?.trim();
+      
+      console.log('✅ OpenAI response received:', {
+        length: aiSummary?.length || 0,
+        sentences: aiSummary?.split('.').filter(s => s.trim()).length || 0
+      });
+
+      if (!aiSummary || aiSummary.length < 10) {
+        throw new Error('OpenAI generated empty or invalid summary');
+      }
+
+      return aiSummary;
+    } catch (error) {
+      console.error('❌ OpenAI API error:', error);
+      throw new Error(`OpenAI API failed: ${error instanceof Error ? error.message : 'Unknown API error'}`);
+    }
+  }
+
+  private async generateGoogleAISummary(prompt: string): Promise<string> {
+    console.log('🚀 Calling Google Gemini AI...');
+    
+    // Check if API key is available
     const apiKey = googleAiApiKey.value();
     if (!apiKey) {
       throw new Error('Google AI API key not configured. Please set the GOOGLE_AI_API_KEY environment variable.');
@@ -42,35 +133,18 @@ export class AISummaryService {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Format opportunity data for AI prompt
-    const opportunityContext = this.buildOpportunityContext(opportunity);
-    
-    // Executive AI prompt with your exact instructions
-    const aiPrompt = `You are generating a concise, professional 2-sentence status update for executive leadership based on opportunity records in a CRM. The company is iOL, so there is no need to explain its services or value proposition. Use a clear, human tone—no fluff, no sales language, no unnecessary background. Only mention agreements if they have explicitly been made; otherwise, refer to them as discussions, proposals, or concepts. Focus strictly on what has already happened (e.g., meetings, discussions, milestones) and what the current standing is. Summarize the latest status and past activities accurately and succinctly.
-
-OPPORTUNITY DATA:
-${opportunityContext}
-
-Generate a 2-sentence executive summary:`;
-
-    console.log('🤖 AI Prompt prepared:', {
-      promptLength: aiPrompt.length,
-      contextLines: opportunityContext.split('\n').length
-    });
-
     try {
-      console.log('🚀 Calling Google Gemini AI...');
-      const result = await model.generateContent(aiPrompt);
+      const result = await model.generateContent(prompt);
       const response = await result.response;
       const aiSummary = response.text().trim();
       
-      console.log('✅ AI response received:', {
+      console.log('✅ Google AI response received:', {
         length: aiSummary.length,
         sentences: aiSummary.split('.').filter(s => s.trim()).length
       });
 
       if (!aiSummary || aiSummary.length < 10) {
-        throw new Error('AI generated empty or invalid summary');
+        throw new Error('Google AI generated empty or invalid summary');
       }
 
       return aiSummary;
@@ -108,6 +182,11 @@ Generate a 2-sentence executive summary:`;
         return new Date(timestamp._seconds * 1000);
       }
       
+      // Handle nested seconds format from Firestore
+      if (timestamp.seconds !== undefined) {
+        return new Date(timestamp.seconds * 1000);
+      }
+      
       return null;
     };
 
@@ -120,8 +199,6 @@ Generate a 2-sentence executive summary:`;
     });
 
     let context = `Title: ${opportunity.title}\n`;
-    context += `Stage: ${opportunity.stage}\n`;
-    context += `Priority: ${opportunity.priority}\n`;
     
     if (opportunity.estimatedDealValue) {
       context += `Estimated Value: $${opportunity.estimatedDealValue.toLocaleString()}\n`;
@@ -134,8 +211,11 @@ Generate a 2-sentence executive summary:`;
       }
     }
 
+    // Include description or summary
     if (opportunity.description) {
       context += `Description: ${opportunity.description}\n`;
+    } else if ((opportunity as any).summary) {
+      context += `Description: ${(opportunity as any).summary}\n`;
     }
 
     context += `\nRECENT ACTIVITIES (Last 30 days):\n`;
@@ -155,7 +235,19 @@ Generate a 2-sentence executive summary:`;
 
       sortedActivities.forEach(activity => {
         const date = activity.sortableDate!.toLocaleDateString();
-        context += `- ${date}: ${activity.type} - ${activity.description} (${activity.status})\n`;
+        
+        // Handle actual activity data structure
+        const activityType = (activity as any).activityType || (activity as any).type || 'Activity';
+        const subject = (activity as any).subject || (activity as any).description || 'No subject';
+        const status = activity.status || 'Unknown';
+        const notes = (activity as any).notes || '';
+        
+        // Include notes if they exist and are meaningful
+        const description = notes && notes.trim() && notes.trim() !== '' 
+          ? `${subject} - ${notes.trim()}` 
+          : subject;
+        
+        context += `- ${date}: ${activityType} - ${description} (${status})\n`;
       });
     }
 
