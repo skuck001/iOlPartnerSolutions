@@ -32,6 +32,7 @@ export const AccountDetails: React.FC = () => {
   // API hooks
   const { 
     accounts,
+    fetchAccounts,
     getAccount, 
     createAccount, 
     updateAccount, 
@@ -40,7 +41,8 @@ export const AccountDetails: React.FC = () => {
   } = useAccountsApi();
   
   const { 
-    contacts, 
+    contacts,
+    loadContacts, 
     createContact, 
     deleteContact,
     loading: contactsLoading 
@@ -48,11 +50,13 @@ export const AccountDetails: React.FC = () => {
   
   const { 
     products,
+    loadProducts,
     loading: productsLoading 
   } = useProductsApi();
   
   const { 
     opportunities,
+    loadOpportunities,
     loading: opportunitiesLoading 
   } = useOpportunitiesApi();
   
@@ -84,6 +88,27 @@ export const AccountDetails: React.FC = () => {
       setFormData(prev => ({ ...prev, ownerId: currentUser.uid }));
     }
   }, [isNew, currentUser?.uid, formData.ownerId]);
+
+  // Load data when component mounts
+  useEffect(() => {
+    console.log('AccountDetails: Loading initial data...');
+    
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          fetchAccounts(),
+          loadContacts(),
+          loadProducts(),
+          loadOpportunities()
+        ]);
+        console.log('AccountDetails: Initial data loaded successfully');
+      } catch (error) {
+        console.error('AccountDetails: Error loading initial data:', error);
+      }
+    };
+
+    loadInitialData();
+  }, [fetchAccounts, loadContacts, loadProducts, loadOpportunities]);
 
   useEffect(() => {
     fetchData();

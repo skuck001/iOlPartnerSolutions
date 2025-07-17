@@ -103,16 +103,20 @@ export const OpportunityDetails: React.FC = () => {
   
   const { 
     accounts,
+    fetchAccounts,
     loading: accountsLoading 
   } = useAccountsApi();
   
   const { 
     contacts,
+    loadContacts,
+    createContact,
     loading: contactsLoading 
   } = useContactsApi();
   
   const { 
     products,
+    loadProducts,
     loading: productsLoading 
   } = useProductsApi();
   
@@ -361,6 +365,26 @@ export const OpportunityDetails: React.FC = () => {
     }
   }, [isNew, currentUser?.uid, formData.ownerId]);
 
+  // Load data when component mounts
+  useEffect(() => {
+    console.log('OpportunityDetails: Loading initial data...');
+    
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          fetchAccounts(),
+          loadContacts(),
+          loadProducts()
+        ]);
+        console.log('OpportunityDetails: Initial data loaded successfully');
+      } catch (error) {
+        console.error('OpportunityDetails: Error loading initial data:', error);
+      }
+    };
+
+    loadInitialData();
+  }, [fetchAccounts, loadContacts, loadProducts]); // Add dependencies to avoid stale closures
+
   // Memoized filtered data to prevent unnecessary re-renders
   const { availableContacts, assignedContacts, suggestedContacts } = useMemo(() => {
     const available = contacts.filter(c => 
@@ -370,11 +394,38 @@ export const OpportunityDetails: React.FC = () => {
     const suggested = available.filter(c => 
       !formData.contactIds.includes(c.id || '')
     );
+    
+    console.log('OpportunityDetails: Contacts filtering', {
+      totalContacts: contacts.length,
+      accountId: formData.accountId,
+      contactIds: formData.contactIds,
+      available: available.length,
+      assigned: assigned.length,
+      suggested: suggested.length
+    });
+    
     return { availableContacts: available, assignedContacts: assigned, suggestedContacts: suggested };
   }, [contacts, formData.accountId, formData.contactIds]);
 
-  const account = useMemo(() => accounts.find(a => a.id === formData.accountId), [accounts, formData.accountId]);
-  const product = useMemo(() => products.find(p => p.id === formData.productId), [products, formData.productId]);
+  const account = useMemo(() => {
+    const foundAccount = accounts.find(a => a.id === formData.accountId);
+    console.log('OpportunityDetails: Account lookup', { 
+      accountId: formData.accountId, 
+      foundAccount: foundAccount?.name, 
+      totalAccounts: accounts.length 
+    });
+    return foundAccount;
+  }, [accounts, formData.accountId]);
+  
+  const product = useMemo(() => {
+    const foundProduct = products.find(p => p.id === formData.productId);
+    console.log('OpportunityDetails: Product lookup', { 
+      productId: formData.productId, 
+      foundProduct: foundProduct?.name, 
+      totalProducts: products.length 
+    });
+    return foundProduct;
+  }, [products, formData.productId]);
 
   // Optimized data fetching - fetch opportunity first, then related data
   const fetchOpportunityData = useCallback(async () => {
@@ -421,10 +472,11 @@ export const OpportunityDetails: React.FC = () => {
 
   // Update loading state when all data is loaded
   useEffect(() => {
-    if (!opportunitiesLoading && !accountsLoading && !contactsLoading && !productsLoading) {
+    if (!opportunitiesLoading && !accountsLoading && !contactsLoading && !productsLoading && 
+        accounts.length >= 0 && contacts.length >= 0 && products.length >= 0) {
       setDataLoading(false);
     }
-  }, [opportunitiesLoading, accountsLoading, contactsLoading, productsLoading]);
+  }, [opportunitiesLoading, accountsLoading, contactsLoading, productsLoading, accounts.length, contacts.length, products.length]);
 
   // Unified activity management
   const activityManager = useActivityManager({ 

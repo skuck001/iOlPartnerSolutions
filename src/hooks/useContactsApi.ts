@@ -160,12 +160,8 @@ export const useContactsApi = () => {
     await loadContacts();
   }, [loadContacts]);
 
-  // Auto-load contacts on hook initialization
-  useEffect(() => {
-    loadContacts().catch(err => {
-      console.error('Failed to auto-load contacts:', err);
-    });
-  }, [loadContacts]);
+  // Note: Auto-loading removed for performance. Use DataContext for cached data or call loadContacts() manually.
+  // Auto-loading was causing duplicate API calls when multiple components used this hook.
 
   return {
     // Data

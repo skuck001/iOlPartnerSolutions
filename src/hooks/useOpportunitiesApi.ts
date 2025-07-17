@@ -170,12 +170,8 @@ export const useOpportunitiesApi = () => {
     await loadOpportunities();
   }, [loadOpportunities]);
 
-  // Auto-load opportunities on hook initialization
-  useEffect(() => {
-    loadOpportunities().catch(err => {
-      console.error('Failed to auto-load opportunities:', err);
-    });
-  }, [loadOpportunities]);
+  // Note: Auto-loading removed for performance. Use DataContext for cached data or call loadOpportunities() manually.
+  // Auto-loading was causing duplicate API calls when multiple components used this hook.
 
   return {
     // Data

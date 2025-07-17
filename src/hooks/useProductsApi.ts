@@ -165,12 +165,8 @@ export const useProductsApi = () => {
     await loadProducts();
   }, [loadProducts]);
 
-  // Auto-load products on hook initialization
-  useEffect(() => {
-    loadProducts().catch(err => {
-      console.error('Failed to auto-load products:', err);
-    });
-  }, [loadProducts]);
+  // Note: Auto-loading removed for performance. Use DataContext for cached data or call loadProducts() manually.
+  // Auto-loading was causing duplicate API calls when multiple components used this hook.
 
   return {
     // Data

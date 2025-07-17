@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
-import { httpsCallable, getFunctions } from 'firebase/functions';
-
-const functions = getFunctions();
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../lib/firebase';
 
 export interface ApiError {
   code: string;

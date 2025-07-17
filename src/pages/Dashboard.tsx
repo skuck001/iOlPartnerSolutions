@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   TrendingUp, 
   DollarSign, 
@@ -18,10 +18,7 @@ import {
   Info
 } from 'lucide-react';
 import type { Opportunity, Account, Task, User } from '../types';
-import { useAccountsApi } from '../hooks/useAccountsApi';
-import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
-import { useTasksApi } from '../hooks/useTasksApi';
-import { useUsersApi } from '../hooks/useUsersApi';
+import { useDataContext } from '../context/DataContext';
 import { format, isAfter, isBefore, subDays, startOfWeek, endOfWeek, differenceInDays, addDays } from 'date-fns';
 
 // Helper function to safely parse any timestamp format
@@ -61,11 +58,8 @@ interface OpportunityHealth {
 }
 
 export const Dashboard: React.FC = () => {
-  // API hooks
-  const { getOpportunities } = useOpportunitiesApi();
-  const { fetchAccounts } = useAccountsApi();
-  const { getTasks } = useTasksApi();
-  const { getAllUsers, getUserDisplayName } = useUsersApi();
+  // Data context
+  const { loadAllData, isLoading } = useDataContext();
   
   // State
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -75,23 +69,51 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<OpportunityHealth | null>(null);
 
+  // Helper function for getting user display names
+  const getUserDisplayName = useCallback((user: User): string => {
+    if (user.displayName && user.displayName.trim()) {
+      return user.displayName;
+    }
+    
+    if (user.firstName && user.lastName) {
+      return `${user.firstName} ${user.lastName}`.trim();
+    }
+    
+    if (user.firstName) {
+      return user.firstName;
+    }
+    
+    if (user.lastName) {
+      return user.lastName;
+    }
+    
+    if (user.email) {
+      return user.email.split('@')[0];
+    }
+    
+    return 'Unknown User';
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [oppsResult, accsResult, tasksResult, usrs] = await Promise.all([
-          getOpportunities(),
-          fetchAccounts(),
-          getTasks(), // Now using Cloud Function
-          getAllUsers() // Now using Cloud Function
-        ]);
+        console.log('Dashboard: Loading all data using DataContext...');
+        const data = await loadAllData();
         
-        // Defensive handling of API responses
-        setOpportunities(oppsResult?.opportunities || []);
-        setAccounts(accsResult?.accounts || []);
-        setTasks(tasksResult?.tasks || []);
-        setUsers(Array.isArray(usrs) ? usrs : []);
+        // Set data from the cached/fresh response
+        setOpportunities(data.opportunities || []);
+        setAccounts(data.accounts || []);
+        setTasks(data.tasks || []);
+        setUsers(data.users || []);
+        
+        console.log('Dashboard: Data loaded successfully:', {
+          opportunities: data.opportunities?.length || 0,
+          accounts: data.accounts?.length || 0,
+          tasks: data.tasks?.length || 0,
+          users: data.users?.length || 0
+        });
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        console.error('Dashboard: Error fetching data:', error);
         // Set empty defaults on error
         setOpportunities([]);
         setAccounts([]);
@@ -103,7 +125,7 @@ export const Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [getOpportunities, fetchAccounts, getTasks, getAllUsers]);
+  }, [loadAllData]);
 
   useEffect(() => {
     if (opportunities.length > 0) {

@@ -22,10 +22,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Opportunity, OpportunityStage, OpportunityPriority, Account, Contact, Product } from '../types';
-import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
-import { useAccountsApi } from '../hooks/useAccountsApi';
-import { useContactsApi } from '../hooks/useContactsApi';
-import { useProductsApi } from '../hooks/useProductsApi';
+import { useDataContext } from '../context/DataContext';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
 type SortField = 'title' | 'stage' | 'priority' | 'estimatedDealValue' | 'expectedCloseDate' | 'lastActivityDate' | 'createdAt' | 'accountName';
@@ -104,28 +101,53 @@ const toMillis = (dateValue: any): number => {
 
 export const Opportunities: React.FC = () => {
   const navigate = useNavigate();
-  const { opportunities, loading: opportunitiesLoading, error: opportunitiesError } = useOpportunitiesApi();
-  const { accounts, loading: accountsLoading } = useAccountsApi();
-  const { contacts, loading: contactsLoading } = useContactsApi();
-  const { products, loading: productsLoading } = useProductsApi();
-  const [loading, setLoading] = useState(true);
+  const {
+    cache,
+    loading,
+    getAccounts,
+    getContacts,
+    getProducts,
+    getOpportunities
+  } = useDataContext();
+  
+  const opportunities = cache?.opportunities || [];
+  const accounts = cache?.accounts || [];
+  const contacts = cache?.contacts || [];
+  const products = cache?.products || [];
+  const [pageLoading, setPageLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('accountName');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | 'All'>('All');
   const [priorityFilter, setPriorityFilter] = useState<OpportunityPriority | 'All'>('All');
 
+  useEffect(() => {
+    fetchAllData();
+  }, []);
+
   // Update loading state when all data is loaded
   useEffect(() => {
-    if (!opportunitiesLoading && !accountsLoading && !contactsLoading && !productsLoading) {
-      setLoading(false);
+    if (!loading?.opportunities && !loading?.accounts && !loading?.contacts && !loading?.products) {
+      setPageLoading(false);
     }
-  }, [opportunitiesLoading, accountsLoading, contactsLoading, productsLoading]);
+  }, [loading]);
 
-  // Show error if opportunities failed to load
-  if (opportunitiesError) {
-    console.error('Error loading opportunities:', opportunitiesError);
-  }
+  const fetchAllData = async () => {
+    try {
+      // Fetch all data via DataContext (optimized with caching)
+      await Promise.all([
+        getOpportunities(),
+        getAccounts(),
+        getContacts(),
+        getProducts()
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setPageLoading(false);
+    }
+  };
+
+
 
   const getAccountName = (accountId: string) => {
     const account = accounts.find(a => a.id === accountId);
@@ -476,7 +498,7 @@ export const Opportunities: React.FC = () => {
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
-        {loading ? (
+        {pageLoading || loading?.opportunities ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>

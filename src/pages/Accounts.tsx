@@ -28,10 +28,7 @@ import * as XLSX from 'xlsx';
 import type { Account, Contact, Product, Opportunity } from '../types';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 import { getUserDisplayName, getUserById } from '../lib/userUtils';
-import { useAccountsApi } from '../hooks/useAccountsApi';
-import { useContactsApi } from '../hooks/useContactsApi';
-import { useProductsApi } from '../hooks/useProductsApi';
-import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
+import { useDataContext } from '../context/DataContext';
 
 type SortField = 'name' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
@@ -39,18 +36,20 @@ type SortDirection = 'asc' | 'desc';
 export const Accounts: React.FC = () => {
   const navigate = useNavigate();
   const {
-    accounts,
-    loading: accountsLoading,
-    error,
-    fetchAccounts,
-    clearError
-  } = useAccountsApi();
+    cache,
+    loading,
+    getAccounts,
+    getContacts,
+    getProducts,
+    getOpportunities
+  } = useDataContext();
   
-  const { contacts, loading: contactsLoading } = useContactsApi();
-  const { products, loading: productsLoading } = useProductsApi();
-  const { opportunities, loading: opportunitiesLoading } = useOpportunitiesApi();
+  const accounts = cache?.accounts || [];
+  const contacts = cache?.contacts || [];
+  const products = cache?.products || [];
+  const opportunities = cache?.opportunities || [];
   
-  const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -58,7 +57,7 @@ export const Accounts: React.FC = () => {
   const [ownerNames, setOwnerNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    fetchAccountsData();
+    fetchAllData();
   }, []);
 
   useEffect(() => {
@@ -84,19 +83,22 @@ export const Accounts: React.FC = () => {
 
   // Update loading state when all data is loaded
   useEffect(() => {
-    if (!accountsLoading && !contactsLoading && !productsLoading && !opportunitiesLoading) {
-      setLoading(false);
+    if (!loading?.accounts && !loading?.contacts && !loading?.products && !loading?.opportunities) {
+      setPageLoading(false);
     }
-  }, [accountsLoading, contactsLoading, productsLoading, opportunitiesLoading]);
+  }, [loading]);
 
-  const fetchAccountsData = async () => {
+  const fetchAllData = async () => {
     try {
-      // Fetch accounts via Cloud Functions
-      await fetchAccounts({
-        limit: 50
-      });
+      // Fetch all data via DataContext (optimized with caching)
+      await Promise.all([
+        getAccounts(),
+        getContacts(),
+        getProducts(),
+        getOpportunities()
+      ]);
     } catch (error) {
-      console.error('Error fetching accounts:', error);
+      console.error('Error fetching data:', error);
     }
   };
 
@@ -286,25 +288,7 @@ export const Accounts: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-4 mx-6 mt-6">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">
-                Error loading accounts
-              </h3>
-              <div className="mt-2 text-sm text-red-700">
-                {error.message}
-              </div>
-              {error.details && (
-                <div className="mt-2 text-xs text-red-600">
-                  Code: {error.code}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-6">
@@ -354,7 +338,7 @@ export const Accounts: React.FC = () => {
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
-        {loading || accountsLoading ? (
+        {pageLoading || loading?.accounts ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>

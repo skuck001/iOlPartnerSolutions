@@ -88,3 +88,8 @@ export {
   updateUser,
   getUsersStats
 } from './modules/users/users.functions';
+
+// Export dashboard batch functions
+export {
+  batchLoadDashboardData
+} from './modules/dashboard/dashboard.functions';

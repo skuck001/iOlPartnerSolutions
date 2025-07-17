@@ -28,8 +28,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Product, ProductCategory, ProductSubcategory, Account, Contact, Opportunity } from '../types';
-import { useProductsApi } from '../hooks/useProductsApi';
-import { getDocuments } from '../lib/firestore';
+import { useDataContext } from '../context/DataContext';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
 type SortField = 'name' | 'category' | 'subcategory' | 'status' | 'version' | 'createdAt';
@@ -83,11 +82,20 @@ const toMillis = (dateValue: any): number => {
 
 export const Products: React.FC = () => {
   const navigate = useNavigate();
-  const { products, loading: productsLoading, error: productsError } = useProductsApi();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    cache,
+    loading,
+    getAccounts,
+    getContacts,
+    getProducts,
+    getOpportunities
+  } = useDataContext();
+  
+  const products = cache?.products || [];
+  const accounts = cache?.accounts || [];
+  const contacts = cache?.contacts || [];
+  const opportunities = cache?.opportunities || [];
+  const [pageLoading, setPageLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -96,39 +104,30 @@ export const Products: React.FC = () => {
   const [accountFilter, setAccountFilter] = useState<string>('All');
 
   useEffect(() => {
-    fetchRelatedData();
+    fetchAllData();
   }, []);
 
   // Update loading state when all data is loaded
   useEffect(() => {
-    if (!productsLoading && accounts.length > 0 && contacts.length > 0 && opportunities.length > 0) {
-      setLoading(false);
-    } else if (!productsLoading && products && products.length === 0) {
-      // Handle case where products is empty but other data might be loading
-      setLoading(false);
+    if (!loading?.products && !loading?.accounts && !loading?.contacts && !loading?.opportunities) {
+      setPageLoading(false);
     }
-  }, [productsLoading, products, accounts, contacts, opportunities]);
+  }, [loading]);
 
-  const fetchRelatedData = async () => {
+  const fetchAllData = async () => {
     try {
-      const [accountsData, contactsData, opportunitiesData] = await Promise.all([
-        getDocuments('accounts'),
-        getDocuments('contacts'),
-        getDocuments('opportunities')
+      // Fetch all data via DataContext (optimized with caching)
+      await Promise.all([
+        getProducts(),
+        getAccounts(),
+        getContacts(),
+        getOpportunities()
       ]);
-      setAccounts(accountsData as Account[]);
-      setContacts(contactsData as Contact[]);
-      setOpportunities(opportunitiesData as Opportunity[]);
     } catch (error) {
-      console.error('Error fetching related data:', error);
-      setLoading(false);
+      console.error('Error fetching data:', error);
+      setPageLoading(false);
     }
   };
-
-  // Show error if products failed to load
-  if (productsError) {
-    console.error('Error loading products:', productsError);
-  }
 
   const getAccount = (accountId: string) => {
     return accounts.find(a => a.id === accountId);
@@ -464,7 +463,7 @@ export const Products: React.FC = () => {
 
       {/* Table */}
       <div className="flex-1 overflow-auto">
-        {loading ? (
+        {pageLoading || loading?.products ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
