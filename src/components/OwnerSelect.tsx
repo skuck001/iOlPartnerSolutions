@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, User, Search } from 'lucide-react';
-import { getAllUsers, getUserDisplayName, getUserInitials } from '../lib/userUtils';
+import { useUsersApi } from '../hooks/useUsersApi';
 import type { User as UserType } from '../types';
 
 interface OwnerSelectProps {
@@ -22,6 +22,7 @@ export const OwnerSelect: React.FC<OwnerSelectProps> = ({
   label,
   required = false
 }) => {
+  const { getAllUsers, getUserDisplayName, getUserInitials } = useUsersApi();
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
@@ -48,7 +49,7 @@ export const OwnerSelect: React.FC<OwnerSelectProps> = ({
     };
 
     fetchUsers();
-  }, [value]);
+  }, [value, getAllUsers]);
 
   const filteredUsers = users.filter(user => {
     if (!searchTerm) return true;

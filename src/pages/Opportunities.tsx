@@ -23,7 +23,9 @@ import {
 import * as XLSX from 'xlsx';
 import type { Opportunity, OpportunityStage, OpportunityPriority, Account, Contact, Product } from '../types';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
-import { getDocuments } from '../lib/firestore';
+import { useAccountsApi } from '../hooks/useAccountsApi';
+import { useContactsApi } from '../hooks/useContactsApi';
+import { useProductsApi } from '../hooks/useProductsApi';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
 
 type SortField = 'title' | 'stage' | 'priority' | 'estimatedDealValue' | 'expectedCloseDate' | 'lastActivityDate' | 'createdAt' | 'accountName';
@@ -103,9 +105,9 @@ const toMillis = (dateValue: any): number => {
 export const Opportunities: React.FC = () => {
   const navigate = useNavigate();
   const { opportunities, loading: opportunitiesLoading, error: opportunitiesError } = useOpportunitiesApi();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
+  const { accounts, loading: accountsLoading } = useAccountsApi();
+  const { contacts, loading: contactsLoading } = useContactsApi();
+  const { products, loading: productsLoading } = useProductsApi();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState<SortField>('accountName');
@@ -113,35 +115,12 @@ export const Opportunities: React.FC = () => {
   const [stageFilter, setStageFilter] = useState<OpportunityStage | 'All'>('All');
   const [priorityFilter, setPriorityFilter] = useState<OpportunityPriority | 'All'>('All');
 
-  useEffect(() => {
-    fetchRelatedData();
-  }, []);
-
   // Update loading state when all data is loaded
   useEffect(() => {
-    if (!opportunitiesLoading && accounts.length > 0 && contacts.length > 0 && products.length > 0) {
-      setLoading(false);
-    } else if (!opportunitiesLoading && opportunities && opportunities.length === 0) {
-      // Handle case where opportunities is empty but other data might be loading
+    if (!opportunitiesLoading && !accountsLoading && !contactsLoading && !productsLoading) {
       setLoading(false);
     }
-  }, [opportunitiesLoading, opportunities, accounts, contacts, products]);
-
-  const fetchRelatedData = async () => {
-    try {
-      const [accountsData, contactsData, productsData] = await Promise.all([
-        getDocuments('accounts'),
-        getDocuments('contacts'),
-        getDocuments('products')
-      ]);
-      setAccounts(accountsData as Account[]);
-      setContacts(contactsData as Contact[]);
-      setProducts(productsData as Product[]);
-    } catch (error) {
-      console.error('Error fetching related data:', error);
-      setLoading(false);
-    }
-  };
+  }, [opportunitiesLoading, accountsLoading, contactsLoading, productsLoading]);
 
   // Show error if opportunities failed to load
   if (opportunitiesError) {

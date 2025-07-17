@@ -3,6 +3,7 @@ import { setGlobalOptions } from 'firebase-functions';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { validateData, accountSchemas, commonSchemas } from '../../shared/validation.middleware';
 import { withErrorHandling } from '../../shared/errors';
+import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { AccountsService } from './accounts.service';
 import { z } from 'zod';
 
@@ -16,10 +17,17 @@ setGlobalOptions({
  * Get accounts with filtering and pagination
  */
 export const getAccounts = onCall(
-  { region: 'us-central1' },
+  { 
+    region: 'us-central1',
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'],
+    maxInstances: 10
+  },
   withErrorHandling(async (request) => {
     // Authenticate user
     const user = await authenticateUser(request.auth);
+    
+    // Apply rate limiting
+    await RateLimiter.checkLimit(user.uid, RateLimitPresets.read.maxRequests, RateLimitPresets.read.windowMs, 'getAccounts');
     
     // Validate query parameters
     const queryParams = validateData(accountSchemas.query, request.data || {});

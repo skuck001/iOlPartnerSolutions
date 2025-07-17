@@ -18,10 +18,10 @@ import {
   Info
 } from 'lucide-react';
 import type { Opportunity, Account, Task, User } from '../types';
-import { getDocuments } from '../lib/firestore';
 import { useAccountsApi } from '../hooks/useAccountsApi';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
-import { getAllUsers, getUserDisplayName } from '../lib/userUtils';
+import { useTasksApi } from '../hooks/useTasksApi';
+import { useUsersApi } from '../hooks/useUsersApi';
 import { format, isAfter, isBefore, subDays, startOfWeek, endOfWeek, differenceInDays, addDays } from 'date-fns';
 
 // Helper function to safely parse any timestamp format
@@ -64,6 +64,8 @@ export const Dashboard: React.FC = () => {
   // API hooks
   const { getOpportunities } = useOpportunitiesApi();
   const { fetchAccounts } = useAccountsApi();
+  const { getTasks } = useTasksApi();
+  const { getAllUsers, getUserDisplayName } = useUsersApi();
   
   // State
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -76,26 +78,32 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [oppsResult, accsResult, tsks, usrs] = await Promise.all([
+        const [oppsResult, accsResult, tasksResult, usrs] = await Promise.all([
           getOpportunities(),
           fetchAccounts(),
-          getDocuments('tasks'), // Keep this as direct Firestore call for now
-          getAllUsers()
+          getTasks(), // Now using Cloud Function
+          getAllUsers() // Now using Cloud Function
         ]);
         
-        setOpportunities(oppsResult.opportunities);
-        setAccounts(accsResult.accounts);
-        setTasks(tsks as Task[]);
-        setUsers(usrs);
+        // Defensive handling of API responses
+        setOpportunities(oppsResult?.opportunities || []);
+        setAccounts(accsResult?.accounts || []);
+        setTasks(tasksResult?.tasks || []);
+        setUsers(Array.isArray(usrs) ? usrs : []);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        // Set empty defaults on error
+        setOpportunities([]);
+        setAccounts([]);
+        setTasks([]);
+        setUsers([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [getOpportunities, fetchAccounts]);
+  }, [getOpportunities, fetchAccounts, getTasks, getAllUsers]);
 
   useEffect(() => {
     if (opportunities.length > 0) {

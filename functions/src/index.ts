@@ -81,5 +81,10 @@ export {
   deleteChecklistItemFromOpportunity
 } from './modules/tasks/tasks.functions';
 
-// Future exports for other modules:
-// export { ... } from './modules/users/users.functions';
+// Export user functions
+export {
+  getUsers,
+  getUser,
+  updateUser,
+  getUsersStats
+} from './modules/users/users.functions';

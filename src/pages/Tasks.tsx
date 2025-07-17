@@ -4,12 +4,11 @@ import type { Task, TaskStatus, Opportunity, Activity, ActivityStatus, Account, 
 import { ListView } from '../components/ListView';
 import { TaskBoard } from '../components/TaskBoard';
 import { ActivityManager } from '../components/ActivityManager';
-import { getDocuments } from '../lib/firestore';
 import { useActivityManager } from '../hooks/useActivityManager';
 import { useAccountsApi } from '../hooks/useAccountsApi';
 import { useContactsApi } from '../hooks/useContactsApi';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
-import { getAllUsers, getUserDisplayNameById } from '../lib/userUtils';
+import { useUsersApi } from '../hooks/useUsersApi';
 import { format, addDays, startOfDay, isToday, isTomorrow, isThisWeek, isPast, isSameDay } from 'date-fns';
 import { 
   LayoutGrid, 
@@ -104,6 +103,7 @@ export const Tasks: React.FC = () => {
   const { getOpportunities, updateOpportunity } = useOpportunitiesApi();
   const { fetchAccounts } = useAccountsApi();
   const { getContacts } = useContactsApi();
+  const { getAllUsers, getUserDisplayNameById } = useUsersApi();
   
   // State
   const [activities, setActivities] = useState<EnhancedTask[]>([]);
@@ -123,13 +123,13 @@ export const Tasks: React.FC = () => {
         getOpportunities(),
         fetchAccounts(),
         getContacts(),
-        getAllUsers()
+        getAllUsers() // Now using Cloud Function
       ]);
       
       const opps = opportunitiesResult.opportunities;
       const accs = accountsResult.accounts;
       const cons = contactsResult.contacts;
-      const usrs = usersData as User[];
+      const usrs = usersData;
       
       setOpportunities(opps);
       setAccounts(accs);
@@ -197,7 +197,7 @@ export const Tasks: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [getOpportunities, fetchAccounts, getContacts]);
+  }, [getOpportunities, fetchAccounts, getContacts, getAllUsers]);
 
   // Unified activity management
   const activityManager = useActivityManager({ 
