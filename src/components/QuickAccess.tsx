@@ -8,8 +8,18 @@ import {
   Clock,
   RefreshCw
 } from 'lucide-react';
-import { getRecentlyUpdatedItems, type RecentlyUpdatedItem } from '../lib/firestore';
+import { useApi } from '../hooks/useApi';
 import { formatDistanceToNow } from 'date-fns';
+
+// Type definition for recently updated items
+export interface RecentlyUpdatedItem {
+  id: string;
+  title: string;
+  type: 'account' | 'contact' | 'opportunity' | 'product';
+  updatedAt: any; // Can be Firestore Timestamp or regular Date
+  subtitle?: string;
+  href: string;
+}
 
 // Helper function to convert various date formats to Date object
 const safeDateConversion = (dateValue: any): Date => {
@@ -53,21 +63,19 @@ const safeDateConversion = (dateValue: any): Date => {
 
 export const QuickAccess: React.FC = () => {
   const [recentItems, setRecentItems] = useState<RecentlyUpdatedItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { callFunction, loading } = useApi();
 
   useEffect(() => {
     fetchRecentItems();
   }, []);
 
   const fetchRecentItems = async () => {
-    setLoading(true);
     try {
-      const items = await getRecentlyUpdatedItems(5);
-      setRecentItems(items);
+      const response = await callFunction('getRecentItems', { limit: 5 });
+      setRecentItems(response.items || []);
     } catch (error) {
       console.error('Error fetching recent items:', error);
-    } finally {
-      setLoading(false);
+      setRecentItems([]); // Set empty array on error
     }
   };
 

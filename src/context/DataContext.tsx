@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useRef, useState, useMemo } from 'react';
+import React, { createContext, useContext, useCallback, useRef, useState, useMemo, useEffect } from 'react';
 import type { 
   Account, 
   Contact, 
@@ -403,6 +403,21 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       await loadAllData();
     }
   }, [clearCache, getAccounts, getContacts, getOpportunities, getProducts, getTasks, getUsers, loadAllData]);
+
+  // Auto-load data when context mounts
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        console.log('DataContext: Auto-loading initial data...');
+        await loadAllData();
+        console.log('DataContext: Initial data loaded successfully');
+      } catch (error) {
+        console.error('DataContext: Error auto-loading initial data:', error);
+      }
+    };
+
+    initializeData();
+  }, [loadAllData]);
 
   // Structured loading states
   const loading = useMemo(() => ({

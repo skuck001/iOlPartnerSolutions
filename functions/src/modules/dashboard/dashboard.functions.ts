@@ -52,11 +52,8 @@ interface BatchLoadDataResponse {
  */
 export const batchLoadDashboardData = onCall(
   {
-    cors: [
-      /firebase\.com$/,
-      /.*\.firebaseapp\.com$/,
-      /localhost/,
-    ],
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'],
+    maxInstances: 10,
     region: 'us-central1'
   },
   async (request) => {
@@ -205,6 +202,148 @@ export const batchLoadDashboardData = onCall(
       throw new HttpsError(
         'internal',
         'Failed to batch load dashboard data',
+        { originalError: error instanceof Error ? error.message : 'Unknown error' }
+      );
+    }
+  }
+); 
+
+/**
+ * Get recently updated items across all collections
+ * This replaces direct Firestore queries from the frontend for better security
+ * 
+ * @param data - Limit for number of items to return
+ * @returns Recently updated items from all collections
+ */
+export const getRecentItems = onCall(
+  {
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'],
+    maxInstances: 10,
+    region: 'us-central1'
+  },
+  async (request) => {
+    try {
+      // Authenticate user
+      const user = await authenticateUser(request.auth);
+      logger.info('Getting recent items', { 
+        userId: user.uid,
+        userEmail: user.email,
+        timestamp: new Date().toISOString()
+      });
+
+      // Parse limit from request data
+      const limit = Math.min(request.data?.limit || 5, 20); // Max 20 items
+
+      // Initialize services with database
+      const db = getFirestore();
+      const contactsService = new ContactsService(db);
+      const opportunitiesService = new OpportunitiesService(db);
+      const productsService = new ProductsService(db);
+
+      const allItems: any[] = [];
+
+      try {
+        // Get recent accounts (static method)
+        const accountsResponse = await AccountsService.getAccounts({ 
+          userId: user.uid,
+          limit 
+        });
+        const accountItems = accountsResponse.accounts.map((item: any) => ({
+          id: item.id,
+          title: item.name,
+          type: 'account' as const,
+          updatedAt: item.updatedAt,
+          subtitle: item.region || '',
+          href: `/accounts/${item.id}`,
+        }));
+        allItems.push(...accountItems);
+      } catch (error) {
+        logger.warn('Error fetching recent accounts:', error);
+      }
+
+      try {
+        // Get recent contacts
+        const contactsResponse = await contactsService.getContacts({ 
+          filters: { ownerId: user.uid },
+          limit 
+        });
+        const contactItems = contactsResponse.contacts.map((item: any) => ({
+          id: item.id,
+          title: item.name,
+          type: 'contact' as const,
+          updatedAt: item.updatedAt,
+          subtitle: item.position || item.email || '',
+          href: `/contacts/${item.id}`,
+        }));
+        allItems.push(...contactItems);
+      } catch (error) {
+        logger.warn('Error fetching recent contacts:', error);
+      }
+
+      try {
+        // Get recent opportunities
+        const opportunitiesResponse = await opportunitiesService.getOpportunities({ 
+          filters: { ownerId: user.uid },
+          limit 
+        });
+        const opportunityItems = opportunitiesResponse.opportunities.map((item: any) => ({
+          id: item.id,
+          title: item.title,
+          type: 'opportunity' as const,
+          updatedAt: item.updatedAt,
+          subtitle: item.stage || '',
+          href: `/opportunities/${item.id}`,
+        }));
+        allItems.push(...opportunityItems);
+      } catch (error) {
+        logger.warn('Error fetching recent opportunities:', error);
+      }
+
+      try {
+        // Get recent products
+        const productsResponse = await productsService.getProducts({ 
+          filters: { ownerId: user.uid },
+          limit 
+        });
+        const productItems = productsResponse.products.map((item: any) => ({
+          id: item.id,
+          title: item.name,
+          type: 'product' as const,
+          updatedAt: item.updatedAt,
+          subtitle: item.category || '',
+          href: `/products/${item.id}`,
+        }));
+        allItems.push(...productItems);
+      } catch (error) {
+        logger.warn('Error fetching recent products:', error);
+      }
+
+      // Sort all items by updatedAt and return top items
+      const sortedItems = allItems
+        .filter(item => item.updatedAt) // Only include items with updatedAt
+        .sort((a, b) => {
+          const timeA = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : new Date(a.updatedAt).getTime();
+          const timeB = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : new Date(b.updatedAt).getTime();
+          return timeB - timeA;
+        })
+        .slice(0, limit);
+
+      return {
+        items: sortedItems,
+        timestamp: Date.now(),
+        count: sortedItems.length
+      };
+
+    } catch (error) {
+      logger.error('Error getting recent items:', error);
+
+      if (error instanceof HttpsError) {
+        throw error;
+      }
+
+      throw new HttpsError(
+        'internal',
+        'Failed to get recent items',
         { originalError: error instanceof Error ? error.message : 'Unknown error' }
       );
     }

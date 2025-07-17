@@ -13,7 +13,6 @@ export interface OpportunityFilters {
   stage?: OpportunityStage;
   priority?: OpportunityPriority;
   search?: string;
-  region?: string;
   contactId?: string;
   minValue?: number;
   maxValue?: number;
@@ -84,10 +83,6 @@ export class OpportunitiesService {
 
     if (filters.priority) {
       query = query.where('priority', '==', filters.priority);
-    }
-
-    if (filters.region) {
-      query = query.where('region', '==', filters.region);
     }
 
     if (filters.contactId) {
@@ -458,10 +453,6 @@ export class OpportunitiesService {
 
     if (filters.priority) {
       query = query.where('priority', '==', filters.priority);
-    }
-
-    if (filters.region) {
-      query = query.where('region', '==', filters.region);
     }
 
     if (filters.contactId) {

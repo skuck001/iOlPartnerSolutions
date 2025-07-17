@@ -96,5 +96,6 @@ export {
 
 // Export dashboard batch functions
 export {
-  batchLoadDashboardData
+  batchLoadDashboardData,
+  getRecentItems
 } from './modules/dashboard/dashboard.functions';

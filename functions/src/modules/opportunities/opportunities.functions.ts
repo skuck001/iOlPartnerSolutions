@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { validateData } from '../../shared/validation.middleware';
+import { validateData, ValidationError } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { OpportunitiesService, OpportunityFilters, OpportunitiesQueryOptions } from './opportunities.service';
@@ -17,7 +17,6 @@ const OpportunityFiltersSchema = z.object({
   stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']).optional(),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
   search: z.string().optional(),
-  region: z.string().optional(),
   contactId: z.string().optional(),
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
@@ -38,6 +37,7 @@ const CreateOpportunitySchema = z.object({
   accountId: z.string().min(1),
   stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  summary: z.string().optional(),
   description: z.string().optional(),
   estimatedDealValue: z.number().optional(),
   probability: z.number().min(0).max(100).optional(),
@@ -45,7 +45,6 @@ const CreateOpportunitySchema = z.object({
   lastActivityDate: z.any().optional(), // Timestamp
   productId: z.string().optional(),
   contactIds: z.array(z.string()),
-  region: z.string().optional(),
   notes: z.array(z.any()).optional(),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
@@ -56,6 +55,7 @@ const UpdateOpportunitySchema = z.object({
   title: z.string().min(1).optional(),
   stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']).optional(),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  summary: z.string().nullish().transform(val => val ?? undefined),
   description: z.string().nullish().transform(val => val ?? undefined),
   estimatedDealValue: z.number().nullish().transform(val => val ?? undefined),
   probability: z.number().min(0).max(100).optional(),
@@ -63,7 +63,6 @@ const UpdateOpportunitySchema = z.object({
   lastActivityDate: z.any().optional(), // Timestamp
   productId: z.string().nullish().transform(val => val ?? undefined),
   contactIds: z.array(z.string()).optional(),
-  region: z.string().nullish().transform(val => val ?? undefined),
   notes: z.array(z.any()).optional(),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
@@ -175,6 +174,10 @@ export const createOpportunity = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+      }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
       }
@@ -196,6 +199,8 @@ export const updateOpportunity = onCall(
       if (!request.data?.opportunityId) {
         throw new HttpsError('invalid-argument', 'Opportunity ID is required');
       }
+
+      console.log('UpdateOpportunity - received data:', JSON.stringify(request.data.updates, null, 2));
 
       const validatedData = validateData(UpdateOpportunitySchema, request.data.updates);
 
@@ -222,6 +227,10 @@ export const updateOpportunity = onCall(
       console.error('Error in updateOpportunity:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);

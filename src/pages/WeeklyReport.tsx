@@ -264,8 +264,8 @@ export const WeeklyReport: React.FC = () => {
         riskFactors.push(`${overdueActivities.length} overdue activities`);
       }
 
-      if (opp.expectedCloseDate && safeDateConversion(opp.expectedCloseDate) < addWeeks(new Date(), 2) && opp.stage === 'Discovery') {
-        riskFactors.push('Close date approaching but still in Discovery');
+              if (opp.expectedCloseDate && safeDateConversion(opp.expectedCloseDate) < addWeeks(new Date(), 2) && opp.stage === 'Lead') {
+        riskFactors.push('Close date approaching but still in Lead stage');
       }
 
       return {
@@ -293,7 +293,8 @@ export const WeeklyReport: React.FC = () => {
 
   const getStageColor = (stage: OpportunityStage) => {
     const colors = {
-      'Discovery': 'bg-blue-100 text-blue-800',
+      'Lead': 'bg-gray-100 text-gray-800',
+      'Qualified': 'bg-blue-100 text-blue-800',
       'Proposal': 'bg-yellow-100 text-yellow-800',
       'Negotiation': 'bg-orange-100 text-orange-800',
       'Closed-Won': 'bg-green-100 text-green-800',

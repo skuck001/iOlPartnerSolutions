@@ -8,7 +8,6 @@ export interface OpportunityFilters {
   stage?: OpportunityStage;
   priority?: OpportunityPriority;
   search?: string;
-  region?: string;
   contactId?: string;
   minValue?: number;
   maxValue?: number;

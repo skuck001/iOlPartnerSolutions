@@ -1,6 +1,6 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type OpportunityStage = 'Discovery' | 'Proposal' | 'Negotiation' | 'Closed-Won' | 'Closed-Lost';
+export type OpportunityStage = 'Lead' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Closed-Won' | 'Closed-Lost';
 export type OpportunityPriority = 'Critical' | 'High' | 'Medium' | 'Low';
 
 // Add activity status type
@@ -52,7 +52,6 @@ export interface Opportunity {
   contactIds: string[]; // Assigned contacts for this opportunity
   stage: OpportunityStage;
   priority: OpportunityPriority;
-  region: string;
   useCase: string; // Legacy field - replaced by iolProducts
   iolProducts?: string[]; // New field for iOL product selection
   notes: string;

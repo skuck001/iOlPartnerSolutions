@@ -88,7 +88,6 @@ export interface Opportunity {
   probability?: number;
   expectedCloseDate?: Timestamp;
   lastActivityDate?: Timestamp;
-  region?: string;
   notes?: Note[];
   activities?: Activity[];
   documents?: Document[];

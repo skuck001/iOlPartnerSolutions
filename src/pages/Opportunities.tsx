@@ -196,7 +196,8 @@ export const Opportunities: React.FC = () => {
 
   const getStageColor = (stage: OpportunityStage) => {
     const colors = {
-      'Discovery': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Lead': 'bg-gray-100 text-gray-800 border-gray-200',
+      'Qualified': 'bg-blue-100 text-blue-800 border-blue-200',
       'Proposal': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'Negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
       'Closed-Won': 'bg-green-100 text-green-800 border-green-200',
@@ -217,7 +218,8 @@ export const Opportunities: React.FC = () => {
 
   const getStageProgress = (stage: OpportunityStage) => {
     const progress = {
-      'Discovery': 20,
+      'Lead': 10,
+      'Qualified': 25,
       'Proposal': 40,
       'Negotiation': 70,
       'Closed-Won': 100,
@@ -325,7 +327,7 @@ export const Opportunities: React.FC = () => {
     return <ArrowUpDown className="h-3 w-3 ml-1 inline opacity-0 group-hover:opacity-50" />;
   };
 
-  const STAGES: OpportunityStage[] = ['Discovery', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
+  const STAGES: OpportunityStage[] = ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
   const PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 
   const handleExportToExcel = () => {

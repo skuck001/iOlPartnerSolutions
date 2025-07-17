@@ -59,14 +59,15 @@ interface OpportunityHealth {
 
 export const Dashboard: React.FC = () => {
   // Data context
-  const { loadAllData, isLoading } = useDataContext();
+  const { cache, isLoading, loadAllData } = useDataContext();
   
-  // State
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use cached data directly instead of local state
+  const opportunities = cache.opportunities || [];
+  const accounts = cache.accounts || [];
+  const tasks = cache.tasks || [];
+  const users = cache.users || [];
+  
+  // State for derived data only
   const [health, setHealth] = useState<OpportunityHealth | null>(null);
 
   // Helper function for getting user display names
@@ -94,38 +95,45 @@ export const Dashboard: React.FC = () => {
     return 'Unknown User';
   }, []);
 
+  // Fallback: Load data if cache is empty after a delay
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        console.log('Dashboard: Loading all data using DataContext...');
-        const data = await loadAllData();
-        
-        // Set data from the cached/fresh response
-        setOpportunities(data.opportunities || []);
-        setAccounts(data.accounts || []);
-        setTasks(data.tasks || []);
-        setUsers(data.users || []);
-        
-        console.log('Dashboard: Data loaded successfully:', {
-          opportunities: data.opportunities?.length || 0,
-          accounts: data.accounts?.length || 0,
-          tasks: data.tasks?.length || 0,
-          users: data.users?.length || 0
-        });
-      } catch (error) {
-        console.error('Dashboard: Error fetching data:', error);
-        // Set empty defaults on error
-        setOpportunities([]);
-        setAccounts([]);
-        setTasks([]);
-        setUsers([]);
-      } finally {
-        setLoading(false);
+    const checkAndLoadData = async () => {
+      // Wait a bit for automatic loading to complete
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Check current state at time of execution
+      const currentOpportunities = cache.opportunities || [];
+      const currentAccounts = cache.accounts || [];
+      const currentTasks = cache.tasks || [];
+      const currentUsers = cache.users || [];
+      
+      const hasData = currentOpportunities.length > 0 || currentAccounts.length > 0 || 
+                     currentTasks.length > 0 || currentUsers.length > 0;
+      
+      if (!hasData) {
+        console.log('Dashboard: No data found after delay, manually triggering load...');
+        try {
+          await loadAllData();
+        } catch (error) {
+          console.error('Dashboard: Failed to manually load data:', error);
+        }
       }
     };
 
-    fetchData();
-  }, [loadAllData]);
+    checkAndLoadData();
+  }, [cache, loadAllData]); // Only depend on cache and loadAllData
+
+  // Log when data is available for debugging
+  useEffect(() => {
+    if (opportunities.length > 0 || accounts.length > 0 || tasks.length > 0 || users.length > 0) {
+      console.log('Dashboard: Data loaded successfully:', {
+        opportunities: opportunities.length,
+        accounts: accounts.length,
+        tasks: tasks.length,
+        users: users.length
+      });
+    }
+  }, [opportunities.length, accounts.length, tasks.length, users.length]);
 
   useEffect(() => {
     if (opportunities.length > 0) {
@@ -135,7 +143,8 @@ export const Dashboard: React.FC = () => {
 
   // Calculate pipeline data
   const pipelineData: PipelineData[] = [
-    { stage: 'Discovery', count: 0, value: 0, color: 'text-blue-800', bgColor: 'bg-blue-500' },
+    { stage: 'Lead', count: 0, value: 0, color: 'text-gray-800', bgColor: 'bg-gray-500' },
+    { stage: 'Qualified', count: 0, value: 0, color: 'text-blue-800', bgColor: 'bg-blue-500' },
     { stage: 'Proposal', count: 0, value: 0, color: 'text-yellow-800', bgColor: 'bg-yellow-500' },
     { stage: 'Negotiation', count: 0, value: 0, color: 'text-orange-800', bgColor: 'bg-orange-500' },
     { stage: 'Closed-Won', count: 0, value: 0, color: 'text-green-800', bgColor: 'bg-green-500' },
@@ -282,7 +291,7 @@ export const Dashboard: React.FC = () => {
                      daysSinceLastActivity > 7 ||
                      (() => {
                        const date = safeParseDate(opp.expectedCloseDate);
-                       return date && isBefore(date, addDays(now, 7)) && opp.stage === 'Discovery';
+                       return date && isBefore(date, addDays(now, 7)) && opp.stage === 'Lead';
                      })();
 
       if (isAtRisk && !stalled.includes(opp)) {
@@ -298,7 +307,7 @@ export const Dashboard: React.FC = () => {
     setHealth({ healthy, atRisk, stalled, closingSoon });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -519,7 +528,8 @@ export const Dashboard: React.FC = () => {
                   let cumulativeAngle = 0;
 
                   const stageColors = {
-                    'Discovery': '#3b82f6',
+                    'Lead': '#6b7280',
+                    'Qualified': '#3b82f6',
                     'Proposal': '#eab308', 
                     'Negotiation': '#f97316',
                     'Closed-Won': '#22c55e',
@@ -598,7 +608,8 @@ export const Dashboard: React.FC = () => {
                   const valuePercent = (totalPipelineValue + totalClosedWonValue) > 0 ? ((stage.value / (totalPipelineValue + totalClosedWonValue)) * 100).toFixed(1) : '0';
                   
                   const stageColors = {
-                    'Discovery': 'bg-blue-500',
+                    'Lead': 'bg-gray-500',
+                    'Qualified': 'bg-blue-500',
                     'Proposal': 'bg-yellow-500', 
                     'Negotiation': 'bg-orange-500',
                     'Closed-Won': 'bg-green-500',

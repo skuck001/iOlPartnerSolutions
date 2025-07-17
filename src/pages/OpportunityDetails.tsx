@@ -59,7 +59,7 @@ import { useAccountsApi } from '../hooks/useAccountsApi';
 import { useContactsApi } from '../hooks/useContactsApi';
 import { useProductsApi } from '../hooks/useProductsApi';
 
-const OPPORTUNITY_STAGES: OpportunityStage[] = ['Discovery', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
+const OPPORTUNITY_STAGES: OpportunityStage[] = ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
 const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 
 const IOL_PRODUCTS = [
@@ -132,9 +132,8 @@ export const OpportunityDetails: React.FC = () => {
     accountId: '',
     productId: '',
     contactIds: [] as string[],
-    stage: 'Discovery' as OpportunityStage,
+    stage: 'Lead' as OpportunityStage,
     priority: 'Medium' as OpportunityPriority,
-    region: '',
     iolProducts: [] as string[],
     notes: '',
     tags: [] as string[],
@@ -195,7 +194,8 @@ export const OpportunityDetails: React.FC = () => {
   // Helper function to get stage color
   const getStageColor = (stage: OpportunityStage) => {
     const colors = {
-      'Discovery': 'bg-blue-100 text-blue-800 border-blue-200',
+      'Lead': 'bg-gray-100 text-gray-800 border-gray-200',
+      'Qualified': 'bg-blue-100 text-blue-800 border-blue-200',
       'Proposal': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'Negotiation': 'bg-orange-100 text-orange-800 border-orange-200',
       'Closed-Won': 'bg-green-100 text-green-800 border-green-200',
@@ -453,7 +453,6 @@ export const OpportunityDetails: React.FC = () => {
             contactIds: opportunityTyped.contactIds || [],
             stage: opportunityTyped.stage,
             priority: opportunityTyped.priority,
-            region: opportunityTyped.region,
             iolProducts: opportunityTyped.iolProducts || [],
             notes: opportunityTyped.notes,
             tags: opportunityTyped.tags || [],
@@ -846,18 +845,6 @@ export const OpportunityDetails: React.FC = () => {
                           </option>
                         ))}
                       </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
-                      <input
-                        type="text"
-                        value={formData.region}
-                        onChange={(e) => setFormData({ ...formData, region: e.target.value })}
-                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        placeholder="e.g., North America, EMEA"
-                        required
-                      />
                     </div>
 
                     <div>
