@@ -167,11 +167,11 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   }, []);
 
   // Generic data fetcher with deduplication
-  const fetchData = useCallback(async <T>(
+  const fetchDataImpl = async (
     dataType: string,
     cloudFunctionName: string,
     params?: any
-  ): Promise<T> => {
+  ): Promise<any> => {
     const cacheKey = `${dataType}_${JSON.stringify(params || {})}`;
     
     // Return cached data if valid
@@ -252,36 +252,38 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     };
 
     return requestPromise;
-  }, [callFunction, getCachedData, setCache, setLoading]);
+  };
+
+  const fetchData = useCallback(fetchDataImpl, [callFunction, getCachedData, setCache, setLoading]);
 
   // Specific data fetchers
   const getAccounts = useCallback(async (): Promise<Account[]> => {
-    const result = await fetchData<{ accounts: Account[] }>('accounts', 'getAccounts', {});
+    const result = await fetchData('accounts', 'getAccounts', {});
     return Array.isArray(result) ? result : result.accounts || [];
   }, [fetchData]);
 
   const getContacts = useCallback(async (): Promise<Contact[]> => {
-    const result = await fetchData<{ contacts: Contact[] }>('contacts', 'getContacts', {});
+    const result = await fetchData('contacts', 'getContacts', {});
     return Array.isArray(result) ? result : result.contacts || [];
   }, [fetchData]);
 
   const getOpportunities = useCallback(async (): Promise<Opportunity[]> => {
-    const result = await fetchData<{ opportunities: Opportunity[] }>('opportunities', 'getOpportunities', {});
+    const result = await fetchData('opportunities', 'getOpportunities', {});
     return Array.isArray(result) ? result : result.opportunities || [];
   }, [fetchData]);
 
   const getProducts = useCallback(async (): Promise<Product[]> => {
-    const result = await fetchData<{ products: Product[] }>('products', 'getProducts', {});
+    const result = await fetchData('products', 'getProducts', {});
     return Array.isArray(result) ? result : result.products || [];
   }, [fetchData]);
 
   const getTasks = useCallback(async (): Promise<Task[]> => {
-    const result = await fetchData<{ tasks: Task[] }>('tasks', 'getTasks', {});
+    const result = await fetchData('tasks', 'getTasks', {});
     return Array.isArray(result) ? result : result.tasks || [];
   }, [fetchData]);
 
   const getUsers = useCallback(async (): Promise<User[]> => {
-    const result = await fetchData<{ users: User[] }>('users', 'getUsers', { limit: 100 });
+    const result = await fetchData('users', 'getUsers', { limit: 100 });
     return Array.isArray(result) ? result : result.users || [];
   }, [fetchData]);
 
