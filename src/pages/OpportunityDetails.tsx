@@ -55,9 +55,8 @@ import { ActivityManager } from '../components/ActivityManager';
 import { AISummary } from '../components/AISummary';
 import { useActivityManager } from '../hooks/useActivityManager';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
-import { useAccountsApi } from '../hooks/useAccountsApi';
 import { useContactsApi } from '../hooks/useContactsApi';
-import { useProductsApi } from '../hooks/useProductsApi';
+import { useDataContext } from '../context/DataContext';
 
 const OPPORTUNITY_STAGES: OpportunityStage[] = ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
 const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
@@ -93,7 +92,14 @@ export const OpportunityDetails: React.FC = () => {
   const { currentUser } = useAuth();
   const isNew = id === 'new' || !id;
   
-  // API hooks
+  // DataContext for cached data
+  const { 
+    cache,
+    loading: dataContextLoading,
+    refreshData
+  } = useDataContext();
+  
+  // API hooks for CRUD operations only
   const { 
     getOpportunity, 
     createOpportunity, 
@@ -103,23 +109,14 @@ export const OpportunityDetails: React.FC = () => {
   } = useOpportunitiesApi();
   
   const { 
-    accounts,
-    fetchAccounts,
-    loading: accountsLoading 
-  } = useAccountsApi();
-  
-  const { 
-    contacts,
-    loadContacts,
     createContact,
     loading: contactsLoading 
   } = useContactsApi();
-  
-  const { 
-    products,
-    loadProducts,
-    loading: productsLoading 
-  } = useProductsApi();
+
+  // Get cached data
+  const accounts = cache?.accounts || [];
+  const contacts = cache?.contacts || [];
+  const products = cache?.products || [];
   
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
@@ -281,6 +278,8 @@ export const OpportunityDetails: React.FC = () => {
           return clean;
         });
       await updateOpportunity(id, { activities: sanitized });
+      // Invalidate opportunities cache to ensure fresh data
+      await refreshData('opportunities');
       // Don't fetch back from Firestore - trust the local state which is already updated
     }
   };
@@ -370,24 +369,7 @@ export const OpportunityDetails: React.FC = () => {
   }, [isNew, currentUser?.uid, formData.ownerId]);
 
   // Load data when component mounts
-  useEffect(() => {
-    console.log('OpportunityDetails: Loading initial data...');
-    
-    const loadInitialData = async () => {
-      try {
-        await Promise.all([
-          fetchAccounts(),
-          loadContacts(),
-          loadProducts()
-        ]);
-        console.log('OpportunityDetails: Initial data loaded successfully');
-      } catch (error) {
-        console.error('OpportunityDetails: Error loading initial data:', error);
-      }
-    };
-
-    loadInitialData();
-  }, [fetchAccounts, loadContacts, loadProducts]); // Add dependencies to avoid stale closures
+  // DataContext automatically loads data, no need for manual fetching
 
   // Memoized filtered data to prevent unnecessary re-renders
   const { availableContacts, assignedContacts, suggestedContacts } = useMemo(() => {
@@ -473,13 +455,13 @@ export const OpportunityDetails: React.FC = () => {
     }
   }, [id, isNew, currentUser?.uid]);
 
-  // Update loading state when all data is loaded
+  // Update loading state when all data is loaded from DataContext
   useEffect(() => {
-    if (!opportunitiesLoading && !accountsLoading && !contactsLoading && !productsLoading && 
+    if (!dataContextLoading?.accounts && !dataContextLoading?.contacts && !dataContextLoading?.products && !contactsLoading && 
         accounts.length >= 0 && contacts.length >= 0 && products.length >= 0) {
       setDataLoading(false);
     }
-  }, [opportunitiesLoading, accountsLoading, contactsLoading, productsLoading, accounts.length, contacts.length, products.length]);
+  }, [dataContextLoading, contactsLoading, accounts.length, contacts.length, products.length]);
 
   // Unified activity management
   const activityManager = useActivityManager({ 
@@ -541,11 +523,15 @@ export const OpportunityDetails: React.FC = () => {
       if (isNew || !id) {
         const newOpportunity = await createOpportunity(submitData);
         console.log('Opportunity created:', newOpportunity);
+        // Invalidate opportunities cache to ensure fresh data
+        await refreshData('opportunities');
         navigate('/opportunities');
       } else {
         const updatedOpportunity = await updateOpportunity(id, submitData);
         console.log('Opportunity updated:', updatedOpportunity);
         setOpportunity(updatedOpportunity);
+        // Invalidate opportunities cache to ensure fresh data
+        await refreshData('opportunities');
       }
     } catch (error) {
       console.error('Error saving opportunity:', error);
@@ -559,6 +545,8 @@ export const OpportunityDetails: React.FC = () => {
     if (opportunity && id && confirm('Are you sure you want to delete this opportunity?')) {
       try {
         await deleteOpportunity(id);
+        // Invalidate opportunities cache to ensure fresh data
+        await refreshData('opportunities');
         navigate('/opportunities');
       } catch (error) {
         console.error('Error deleting opportunity:', error);
@@ -587,6 +575,9 @@ export const OpportunityDetails: React.FC = () => {
         };
         
         const newContactResponse = await createContact(contactData);
+        
+        // Invalidate contacts cache to ensure fresh data
+        await refreshData('contacts');
         
         // Add new contact to opportunity
         handleContactToggle(newContactResponse.id);
