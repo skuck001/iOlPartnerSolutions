@@ -1,10 +1,15 @@
 import { Opportunity } from '../../types';
 import { Timestamp } from 'firebase-admin/firestore';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { defineSecret } from 'firebase-functions/params';
+
+// Define the Google AI API key as a secret
+const googleAiApiKey = defineSecret('GOOGLE_AI_API_KEY');
 
 export class AISummaryService {
   
   async generateExecutiveSummary(opportunity: Opportunity): Promise<string> {
-    console.log('🧠 AISummaryService: Starting executive summary generation');
+    console.log('🧠 AISummaryService: Starting AI executive summary generation');
     console.log('📋 Opportunity details:', {
       id: opportunity.id,
       title: opportunity.title,
@@ -13,105 +18,153 @@ export class AISummaryService {
       estimatedValue: opportunity.estimatedDealValue
     });
 
-    // For now, use intelligent mock summaries until we resolve deployment issues
-    // TODO: Restore Google AI integration once Cloud Functions are stable
     try {
-      console.log('🎯 Generating intelligent summary...');
-      const summary = this.generateIntelligentSummary(opportunity);
-      console.log('✅ Intelligent summary generated successfully');
+      console.log('🤖 Generating AI summary with Google Gemini...');
+      const summary = await this.generateAISummary(opportunity);
+      console.log('✅ AI summary generated successfully');
       return summary;
     } catch (error) {
-      console.error('❌ Error generating intelligent summary:', error);
-      console.log('🔄 Falling back to mock summary...');
-      const mockSummary = this.generateMockSummary(opportunity);
-      console.log('✅ Mock summary generated as fallback');
-      return mockSummary;
+      console.error('❌ Error generating AI summary:', error);
+      throw new Error(`Failed to generate AI summary: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
-  private generateIntelligentSummary(opportunity: Opportunity): string {
-    console.log('🔍 Analyzing opportunity data for intelligent summary...');
+  private async generateAISummary(opportunity: Opportunity): Promise<string> {
+    console.log('🔍 Analyzing opportunity data for AI generation...');
     
-    const activities = opportunity.activities || [];
-    console.log('📊 Activity analysis:', {
-      totalActivities: activities.length,
-      activityTypes: activities.map(a => a.type).reduce((acc, type) => {
-        acc[type] = (acc[type] || 0) + 1;
-        return acc;
-      }, {} as Record<string, number>)
+    // Check if API key is available from environment variable
+    const apiKey = googleAiApiKey.value();
+    if (!apiKey) {
+      throw new Error('Google AI API key not configured. Please set the GOOGLE_AI_API_KEY environment variable.');
+    }
+
+    // Initialize Google AI
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    // Format opportunity data for AI prompt
+    const opportunityContext = this.buildOpportunityContext(opportunity);
+    
+    // Executive AI prompt with your exact instructions
+    const aiPrompt = `You are generating a concise, professional 2-sentence status update for executive leadership based on opportunity records in a CRM. The company is iOL, so there is no need to explain its services or value proposition. Use a clear, human tone—no fluff, no sales language, no unnecessary background. Only mention agreements if they have explicitly been made; otherwise, refer to them as discussions, proposals, or concepts. Focus strictly on what has already happened (e.g., meetings, discussions, milestones) and what the current standing is. Summarize the latest status and past activities accurately and succinctly.
+
+OPPORTUNITY DATA:
+${opportunityContext}
+
+Generate a 2-sentence executive summary:`;
+
+    console.log('🤖 AI Prompt prepared:', {
+      promptLength: aiPrompt.length,
+      contextLines: opportunityContext.split('\n').length
     });
 
+    try {
+      console.log('🚀 Calling Google Gemini AI...');
+      const result = await model.generateContent(aiPrompt);
+      const response = await result.response;
+      const aiSummary = response.text().trim();
+      
+      console.log('✅ AI response received:', {
+        length: aiSummary.length,
+        sentences: aiSummary.split('.').filter(s => s.trim()).length
+      });
+
+      if (!aiSummary || aiSummary.length < 10) {
+        throw new Error('AI generated empty or invalid summary');
+      }
+
+      return aiSummary;
+    } catch (error) {
+      console.error('❌ Google AI API error:', error);
+      throw new Error(`Google AI API failed: ${error instanceof Error ? error.message : 'Unknown API error'}`);
+    }
+  }
+
+  private buildOpportunityContext(opportunity: Opportunity): string {
+    const activities = opportunity.activities || [];
+    
+    // Safe timestamp conversion helper
+    const getTimestampAsDate = (timestamp: any): Date | null => {
+      if (!timestamp) return null;
+      
+      // If it's a Firestore Timestamp
+      if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+      }
+      
+      // If it's already a Date
+      if (timestamp instanceof Date) {
+        return timestamp;
+      }
+      
+      // If it's a string or number, try to parse it
+      if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+        const date = new Date(timestamp);
+        return isNaN(date.getTime()) ? null : date;
+      }
+      
+      // If it has seconds/nanoseconds (Firestore Timestamp serialized format)
+      if (timestamp._seconds !== undefined) {
+        return new Date(timestamp._seconds * 1000);
+      }
+      
+      return null;
+    };
+
     const recentActivities = activities.filter(activity => {
-      const activityDate = activity.dateTime.toDate();
+      const activityDate = getTimestampAsDate(activity.dateTime);
+      if (!activityDate) return false;
+      
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       return activityDate > thirtyDaysAgo;
     });
-    console.log('📅 Recent activities (last 30 days):', recentActivities.length);
 
-    const completedActivities = recentActivities.filter(a => a.status === 'Completed');
-    const scheduledActivities = recentActivities.filter(a => a.status === 'Scheduled');
+    let context = `Title: ${opportunity.title}\n`;
+    context += `Stage: ${opportunity.stage}\n`;
+    context += `Priority: ${opportunity.priority}\n`;
     
-    console.log('📈 Activity status breakdown:', {
-      completed: completedActivities.length,
-      scheduled: scheduledActivities.length,
-      total: recentActivities.length
-    });
+    if (opportunity.estimatedDealValue) {
+      context += `Estimated Value: $${opportunity.estimatedDealValue.toLocaleString()}\n`;
+    }
     
-    // Analyze activity types
-    const meetingCount = recentActivities.filter(a => a.type === 'Meeting').length;
-    const demoCount = recentActivities.filter(a => a.type === 'Demo').length;
-    
-    console.log('🎯 Activity type analysis:', {
-      meetings: meetingCount,
-      demos: demoCount
-    });
-    
-    // Generate intelligent summary based on data
-    let statusText = '';
-    let nextStepText = '';
-    
-    if (completedActivities.length > 0) {
-      if (meetingCount > 0) {
-        statusText = `shows strong momentum with ${meetingCount} recent meeting${meetingCount > 1 ? 's' : ''} completed`;
-      } else if (demoCount > 0) {
-        statusText = `demonstrates progress with ${demoCount} demo session${demoCount > 1 ? 's' : ''} conducted`;
-      } else {
-        statusText = `maintains active engagement with ${completedActivities.length} recent interaction${completedActivities.length > 1 ? 's' : ''}`;
+    if (opportunity.expectedCloseDate) {
+      const closeDate = getTimestampAsDate(opportunity.expectedCloseDate);
+      if (closeDate) {
+        context += `Expected Close: ${closeDate.toLocaleDateString()}\n`;
       }
-    } else {
-      statusText = 'is in early development phase';
     }
-    
-    if (scheduledActivities.length > 0) {
-      nextStepText = `${scheduledActivities.length} upcoming engagement${scheduledActivities.length > 1 ? 's are' : ' is'} scheduled to advance the partnership`;
-    } else {
-      nextStepText = 'next engagement should be scheduled to maintain momentum';
+
+    if (opportunity.description) {
+      context += `Description: ${opportunity.description}\n`;
     }
+
+    context += `\nRECENT ACTIVITIES (Last 30 days):\n`;
     
-    const finalSummary = `The ${opportunity.title} opportunity ${statusText}. ${nextStepText}.`;
-    console.log('📝 Generated intelligent summary:', {
-      length: finalSummary.length,
-      preview: finalSummary.substring(0, 80) + '...'
-    });
-    
-    return finalSummary;
+    if (recentActivities.length === 0) {
+      context += `No recent activities recorded.\n`;
+    } else {
+      // Sort activities by date (most recent first)
+      const sortedActivities = recentActivities
+        .map(activity => ({
+          ...activity,
+          sortableDate: getTimestampAsDate(activity.dateTime)
+        }))
+        .filter(activity => activity.sortableDate !== null)
+        .sort((a, b) => b.sortableDate!.getTime() - a.sortableDate!.getTime())
+        .slice(0, 10); // Limit to most recent 10 activities
+
+      sortedActivities.forEach(activity => {
+        const date = activity.sortableDate!.toLocaleDateString();
+        context += `- ${date}: ${activity.type} - ${activity.description} (${activity.status})\n`;
+      });
+    }
+
+    return context;
   }
 
-  private generateMockSummary(opportunity: Opportunity): string {
-    console.log('🎭 Generating mock summary fallback...');
-    const recentActivities = opportunity.activities?.length || 0;
-    const mockSummary = `The ${opportunity.title} opportunity is progressing with ${recentActivities} activities recorded. Next steps involve continued engagement to advance this partnership forward.`;
-    console.log('📝 Mock summary generated:', {
-      activitiesCount: recentActivities,
-      length: mockSummary.length
-    });
-    return mockSummary;
-  }
 
-  // TODO: Restore this method when Google AI integration is working
-  // private buildExecutivePrompt(opportunity: Opportunity): string {
-  //   return `Mock prompt for ${opportunity.title}`;
-  // }
+
+
 
   /**
    * Check if opportunity needs AI summary update
