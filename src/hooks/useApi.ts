@@ -21,7 +21,12 @@ export const useApi = () => {
     
     try {
       console.log(`Calling Cloud Function: ${functionName}`, data);
+      console.log('Firebase Functions instance:', functions);
+      console.log('Firebase Functions region:', functions.region || 'default');
+      
       const callable = httpsCallable(functions, functionName);
+      console.log('Callable created:', callable);
+      
       const result = await callable(data);
       console.log(`Cloud Function ${functionName} response:`, result);
       return result.data as T;

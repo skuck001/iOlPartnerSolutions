@@ -63,7 +63,8 @@ export {
 
 // Export AI summary functions
 export {
-  generateOpportunitySummaryManual
+  generateOpportunitySummaryManualV2,
+  testFirebaseConnection
 } from './modules/opportunities/ai-summary.functions';
 
 // Export task functions

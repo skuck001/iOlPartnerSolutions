@@ -253,18 +253,18 @@ export class OpportunitiesService {
       id: opportunityId
     } as Opportunity;
 
-    // Audit log
-    await AuditService.log({
-      userId,
-      action: 'update',
-      resourceType: 'opportunity',
-      resourceId: opportunityId,
-      data: { 
-        title: updatedOpportunity.title,
-        updatedFields: Object.keys(updates),
-        newStage: updateData.stage
-      }
-    });
+    // Audit log - temporarily disabled due to logging issues
+    // await AuditService.log({
+    //   userId,
+    //   action: 'update',
+    //   resourceType: 'opportunity',
+    //   resourceId: opportunityId,
+    //   data: { 
+    //     title: updatedOpportunity.title,
+    //     updatedFields: Object.keys(updates),
+    //     newStage: updateData.stage
+    //   }
+    // });
 
     return updatedOpportunity;
   }

@@ -155,10 +155,23 @@ export const useOpportunitiesApi = () => {
   // Generate AI summary manually
   const generateAISummaryManual = useCallback(async (opportunityId: string): Promise<{ summary: string; generatedAt: string }> => {
     try {
-      const response = await callFunction('generateOpportunitySummaryManual', { opportunityId });
+      const response = await callFunction<{ 
+        success: boolean; 
+        summary: string; 
+        generatedAt: string;
+        metadata?: {
+          opportunityId: string;
+          userId: string;
+          processingTimeMs: number;
+          summaryGenerationTimeMs: number;
+          dbUpdateTimeMs: number;
+        }
+      }>('generateOpportunitySummaryManualV2', { opportunityId });
+      
+      // Return just the summary and generatedAt for backward compatibility
       return {
-        summary: response.data.summary,
-        generatedAt: response.data.generatedAt
+        summary: response.summary,
+        generatedAt: response.generatedAt
       };
     } catch (err) {
       console.error('Error generating AI summary:', err);

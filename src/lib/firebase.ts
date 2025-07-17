@@ -19,13 +19,7 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase services with optimizations
 export const db = getFirestore(app);
 export const auth = getAuth(app);
-export const functions = getFunctions(app);
-
-// Set region for functions to reduce latency (adjust based on your deployment region)
-// This can significantly reduce function call times
-if (import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION) {
-  functions.region = import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION;
-}
+export const functions = getFunctions(app, 'us-central1');
 
 // Performance optimizations
 if (typeof window !== 'undefined') {

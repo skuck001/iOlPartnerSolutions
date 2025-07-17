@@ -31,10 +31,32 @@ export const AISummary: React.FC<AISummaryProps> = ({ opportunity, onSummaryUpda
   };
 
   const hasSummary = Boolean(opportunity.aiSummary);
-  const summaryAge = opportunity.aiSummaryGeneratedAt 
-    ? Date.now() - opportunity.aiSummaryGeneratedAt.toDate().getTime()
-    : null;
   
+  // Safely handle timestamp conversion
+  const getTimestampAsDate = (timestamp: any): Date | null => {
+    if (!timestamp) return null;
+    
+    // If it's a Firestore Timestamp
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    
+    // If it's already a Date
+    if (timestamp instanceof Date) {
+      return timestamp;
+    }
+    
+    // If it's a string or number, try to parse it
+    if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+      const date = new Date(timestamp);
+      return isNaN(date.getTime()) ? null : date;
+    }
+    
+    return null;
+  };
+
+  const summaryDate = getTimestampAsDate(opportunity.aiSummaryGeneratedAt);
+  const summaryAge = summaryDate ? Date.now() - summaryDate.getTime() : null;
   const isStale = summaryAge ? summaryAge > 24 * 60 * 60 * 1000 : false; // 24 hours
 
   // Truncate summary for display
@@ -89,9 +111,9 @@ export const AISummary: React.FC<AISummaryProps> = ({ opportunity, onSummaryUpda
             )}
           </p>
           
-          {opportunity.aiSummaryGeneratedAt && (
+          {summaryDate && (
             <div className="text-xs text-gray-500">
-              Generated {format(opportunity.aiSummaryGeneratedAt.toDate(), 'MMM d, h:mm a')}
+              Generated {format(summaryDate, 'MMM d, h:mm a')}
             </div>
           )}
         </div>

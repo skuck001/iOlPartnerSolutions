@@ -4,30 +4,67 @@ import { Timestamp } from 'firebase-admin/firestore';
 export class AISummaryService {
   
   async generateExecutiveSummary(opportunity: Opportunity): Promise<string> {
+    console.log('🧠 AISummaryService: Starting executive summary generation');
+    console.log('📋 Opportunity details:', {
+      id: opportunity.id,
+      title: opportunity.title,
+      stage: opportunity.stage,
+      activitiesCount: opportunity.activities?.length || 0,
+      estimatedValue: opportunity.estimatedDealValue
+    });
+
     // For now, use intelligent mock summaries until we resolve deployment issues
     // TODO: Restore Google AI integration once Cloud Functions are stable
     try {
-      return this.generateIntelligentSummary(opportunity);
+      console.log('🎯 Generating intelligent summary...');
+      const summary = this.generateIntelligentSummary(opportunity);
+      console.log('✅ Intelligent summary generated successfully');
+      return summary;
     } catch (error) {
-      console.error('Error generating summary:', error);
-      return this.generateMockSummary(opportunity);
+      console.error('❌ Error generating intelligent summary:', error);
+      console.log('🔄 Falling back to mock summary...');
+      const mockSummary = this.generateMockSummary(opportunity);
+      console.log('✅ Mock summary generated as fallback');
+      return mockSummary;
     }
   }
 
   private generateIntelligentSummary(opportunity: Opportunity): string {
+    console.log('🔍 Analyzing opportunity data for intelligent summary...');
+    
     const activities = opportunity.activities || [];
+    console.log('📊 Activity analysis:', {
+      totalActivities: activities.length,
+      activityTypes: activities.map(a => a.type).reduce((acc, type) => {
+        acc[type] = (acc[type] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    });
+
     const recentActivities = activities.filter(activity => {
       const activityDate = activity.dateTime.toDate();
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       return activityDate > thirtyDaysAgo;
     });
+    console.log('📅 Recent activities (last 30 days):', recentActivities.length);
 
     const completedActivities = recentActivities.filter(a => a.status === 'Completed');
     const scheduledActivities = recentActivities.filter(a => a.status === 'Scheduled');
     
+    console.log('📈 Activity status breakdown:', {
+      completed: completedActivities.length,
+      scheduled: scheduledActivities.length,
+      total: recentActivities.length
+    });
+    
     // Analyze activity types
     const meetingCount = recentActivities.filter(a => a.type === 'Meeting').length;
     const demoCount = recentActivities.filter(a => a.type === 'Demo').length;
+    
+    console.log('🎯 Activity type analysis:', {
+      meetings: meetingCount,
+      demos: demoCount
+    });
     
     // Generate intelligent summary based on data
     let statusText = '';
@@ -51,12 +88,24 @@ export class AISummaryService {
       nextStepText = 'next engagement should be scheduled to maintain momentum';
     }
     
-    return `The ${opportunity.title} opportunity ${statusText}. ${nextStepText}.`;
+    const finalSummary = `The ${opportunity.title} opportunity ${statusText}. ${nextStepText}.`;
+    console.log('📝 Generated intelligent summary:', {
+      length: finalSummary.length,
+      preview: finalSummary.substring(0, 80) + '...'
+    });
+    
+    return finalSummary;
   }
 
   private generateMockSummary(opportunity: Opportunity): string {
+    console.log('🎭 Generating mock summary fallback...');
     const recentActivities = opportunity.activities?.length || 0;
-    return `The ${opportunity.title} opportunity is progressing with ${recentActivities} activities recorded. Next steps involve continued engagement to advance this partnership forward.`;
+    const mockSummary = `The ${opportunity.title} opportunity is progressing with ${recentActivities} activities recorded. Next steps involve continued engagement to advance this partnership forward.`;
+    console.log('📝 Mock summary generated:', {
+      activitiesCount: recentActivities,
+      length: mockSummary.length
+    });
+    return mockSummary;
   }
 
   // TODO: Restore this method when Google AI integration is working
