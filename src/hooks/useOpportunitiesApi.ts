@@ -153,6 +153,20 @@ export const useOpportunitiesApi = () => {
     }
   }, [callFunction]);
 
+  // Generate AI summary manually
+  const generateAISummaryManual = useCallback(async (opportunityId: string): Promise<{ summary: string; generatedAt: string }> => {
+    try {
+      const response = await callFunction('generateOpportunitySummaryManual', { opportunityId });
+      return {
+        summary: response.data.summary,
+        generatedAt: response.data.generatedAt
+      };
+    } catch (err) {
+      console.error('Error generating AI summary:', err);
+      throw err;
+    }
+  }, [callFunction]);
+
   // Load initial opportunities
   const loadOpportunities = useCallback(async (options: OpportunitiesQueryOptions = {}) => {
     try {
@@ -190,6 +204,7 @@ export const useOpportunitiesApi = () => {
     deleteOpportunity,
     getOpportunitiesStats,
     bulkUpdateOpportunities,
+    generateAISummaryManual,
     
     // Utility methods
     loadOpportunities,

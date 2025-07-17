@@ -52,6 +52,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../hooks/useAuth';
 import { OwnerSelect } from '../components/OwnerSelect';
 import { ActivityManager } from '../components/ActivityManager';
+import { AISummary } from '../components/AISummary';
 import { useActivityManager } from '../hooks/useActivityManager';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 import { useAccountsApi } from '../hooks/useAccountsApi';
@@ -174,6 +175,9 @@ export const OpportunityDetails: React.FC = () => {
     position: '',
     phone: ''
   });
+
+  // AI Summary state
+  const [localAiSummary, setLocalAiSummary] = useState<string>('');
 
   // Helper function to get activity type icon
   const getActivityIcon = (activityType: string) => {
@@ -491,6 +495,13 @@ export const OpportunityDetails: React.FC = () => {
     fetchOpportunityData();
   }, [fetchOpportunityData]);
 
+  // Sync AI summary local state with opportunity data
+  useEffect(() => {
+    if (opportunity?.aiSummary) {
+      setLocalAiSummary(opportunity.aiSummary);
+    }
+  }, [opportunity?.aiSummary]);
+
   // No longer needed as data is auto-loaded by hooks
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -605,6 +616,15 @@ export const OpportunityDetails: React.FC = () => {
       ...formData,
       tags: formData.tags.filter(tag => tag !== tagToRemove)
     });
+  };
+
+  // Handler for AI summary updates
+  const handleAiSummaryUpdate = (summary: string) => {
+    setLocalAiSummary(summary);
+    // Optionally trigger a refresh of the opportunity data
+    if (id) {
+      fetchOpportunityData();
+    }
   };
 
   const handleIolProductToggle = (product: string) => {
@@ -1375,6 +1395,17 @@ export const OpportunityDetails: React.FC = () => {
                       {formData.priority} Priority
                     </span>
                   </div>
+
+                  {/* AI Executive Summary */}
+                  {!isNew && opportunity && (
+                    <AISummary 
+                      opportunity={{
+                        ...opportunity,
+                        aiSummary: localAiSummary || opportunity.aiSummary
+                      }}
+                      onSummaryUpdate={handleAiSummaryUpdate}
+                    />
+                  )}
 
                   {/* Detailed Stats Grid */}
                   <div className="space-y-3 text-sm">

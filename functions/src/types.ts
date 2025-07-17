@@ -93,6 +93,10 @@ export interface Opportunity {
   activities?: Activity[];
   documents?: Document[];
   tags?: string[];
+  // AI Summary fields
+  aiSummary?: string;
+  aiSummaryGeneratedAt?: Timestamp;
+  aiSummaryManuallyRequested?: boolean;
   ownerId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;

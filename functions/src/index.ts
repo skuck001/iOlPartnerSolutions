@@ -61,6 +61,11 @@ export {
   bulkUpdateOpportunities
 } from './modules/opportunities/opportunities.functions';
 
+// Export AI summary functions
+export {
+  generateOpportunitySummaryManual
+} from './modules/opportunities/ai-summary.functions';
+
 // Export task functions
 export {
   // Standalone tasks

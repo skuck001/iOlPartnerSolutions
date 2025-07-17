@@ -77,6 +77,11 @@ export interface Opportunity {
   expectedCloseDate?: Timestamp;
   lastActivityDate?: Timestamp;
   
+  // AI Summary fields
+  aiSummary?: string;
+  aiSummaryGeneratedAt?: Timestamp;
+  aiSummaryManuallyRequested?: boolean; // Skip next auto-run if true
+  
   ownerId: string; // User ID of the opportunity owner
   createdAt: Timestamp;
   updatedAt?: Timestamp;
