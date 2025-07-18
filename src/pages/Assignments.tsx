@@ -15,17 +15,21 @@ import {
   AlertTriangle,
   User,
   Target,
-  Download
+  Download,
+  List,
+  LayoutGrid,
+  TrendingUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAssignmentsApi } from '../hooks/useAssignmentsApi';
 import { useAuth } from '../hooks/useAuth';
 import { ASSIGNMENT_STATUSES } from '../types/Assignment';
 import type { Assignment, AssignmentStatus } from '../types';
-import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
+import { format, formatDistanceToNow, isAfter, isBefore, startOfDay, addDays, isToday, isTomorrow, isThisWeek, isPast, isSameDay } from 'date-fns';
 
 type SortField = 'title' | 'status' | 'dueDate' | 'createdAt' | 'progress';
 type SortDirection = 'asc' | 'desc';
+type ViewMode = 'list' | 'scheduled' | 'board';
 
 // Helper function to convert various date formats to Date object
 const toDate = (dateValue: any): Date => {
@@ -71,6 +75,8 @@ const Assignments: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [statusFilter, setStatusFilter] = useState<AssignmentStatus | 'All'>('All');
   const [hideCompleted, setHideCompleted] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
   useEffect(() => {
     if (currentUser) {
@@ -122,6 +128,79 @@ const Assignments: React.FC = () => {
   const isAssignmentOverdue = (assignment: Assignment) => {
     if (!assignment.dueDate) return false;
     return isBefore(toDate(assignment.dueDate), startOfDay(new Date()));
+  };
+
+  // Calculate assignment statistics
+  const calculateStats = () => {
+    const total = assignments?.length || 0;
+    const overdue = (assignments || []).filter(assignment => 
+      assignment.status !== 'done' && isAssignmentOverdue(assignment)
+    ).length;
+    const dueToday = (assignments || []).filter(assignment => 
+      assignment.status !== 'done' && assignment.dueDate && isToday(toDate(assignment.dueDate))
+    ).length;
+    const inProgress = (assignments || []).filter(assignment => assignment.status === 'in_progress').length;
+    const completed = (assignments || []).filter(assignment => assignment.status === 'done').length;
+    
+    return { total, overdue, dueToday, inProgress, completed };
+  };
+
+  // Get next 7 days for calendar
+  const getNext7Days = () => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      days.push(addDays(new Date(), i));
+    }
+    return days;
+  };
+
+  // Get assignments for a specific date
+  const getAssignmentsForDate = (date: Date) => {
+    return (assignments || []).filter(assignment => 
+      assignment.dueDate && isSameDay(toDate(assignment.dueDate), date)
+    );
+  };
+
+  // Group assignments by date for scheduled view
+  const groupAssignmentsByDate = () => {
+    const groups: { [key: string]: Assignment[] } = {
+      overdue: [],
+      today: [],
+      tomorrow: [],
+      thisWeek: [],
+      later: []
+    };
+
+    const filtered = filteredAndSortedAssignments.filter(assignment => {
+      const matchesDate = selectedDate ? 
+        assignment.dueDate && isSameDay(toDate(assignment.dueDate), selectedDate) : true;
+      return matchesDate;
+    });
+
+    filtered.forEach(assignment => {
+      if (assignment.status === 'done') return; // Skip completed assignments in scheduled view
+      
+      if (!assignment.dueDate) {
+        groups.later.push(assignment);
+        return;
+      }
+      
+      const assignmentDate = toDate(assignment.dueDate);
+      
+      if (isPast(assignmentDate) && !isToday(assignmentDate)) {
+        groups.overdue.push(assignment);
+      } else if (isToday(assignmentDate)) {
+        groups.today.push(assignment);
+      } else if (isTomorrow(assignmentDate)) {
+        groups.tomorrow.push(assignment);
+      } else if (isThisWeek(assignmentDate)) {
+        groups.thisWeek.push(assignment);
+      } else {
+        groups.later.push(assignment);
+      }
+    });
+
+    return groups;
   };
 
   const filteredAndSortedAssignments = (assignments || [])
@@ -243,6 +322,10 @@ const Assignments: React.FC = () => {
     }
   };
 
+  const stats = calculateStats();
+  const next7Days = getNext7Days();
+  const groupedAssignments = groupAssignmentsByDate();
+
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
@@ -256,7 +339,7 @@ const Assignments: React.FC = () => {
           </div>
         </div>
         
-        {/* Search and Filters */}
+        {/* Search, Filters, and View Toggle */}
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -270,6 +353,37 @@ const Assignments: React.FC = () => {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
+                }`}
+              >
+                <List className="h-4 w-4 inline mr-1" />
+                List
+              </button>
+              <button
+                onClick={() => setViewMode('scheduled')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'scheduled' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
+                }`}
+              >
+                <Calendar className="h-4 w-4 inline mr-1" />
+                Scheduled
+              </button>
+              <button
+                onClick={() => setViewMode('board')}
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'board' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600'
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4 inline mr-1" />
+                Board
+              </button>
+            </div>
+            
             {/* Hide Completed Checkbox */}
             <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
               <input
@@ -294,6 +408,121 @@ const Assignments: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Statistics Cards */}
+      <div className="px-6 py-4 bg-white border-b border-gray-200">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-red-600">Overdue</p>
+                <p className="text-2xl font-bold text-red-900 mt-1">{stats.overdue}</p>
+              </div>
+              <div className="p-2 bg-red-100 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-orange-600">Due Today</p>
+                <p className="text-2xl font-bold text-orange-900 mt-1">{stats.dueToday}</p>
+              </div>
+              <div className="p-2 bg-orange-100 rounded-lg">
+                <Clock className="h-5 w-5 text-orange-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-blue-600">In Progress</p>
+                <p className="text-2xl font-bold text-blue-900 mt-1">{stats.inProgress}</p>
+              </div>
+              <div className="p-2 bg-blue-100 rounded-lg">
+                <TrendingUp className="h-5 w-5 text-blue-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-green-600">Completed</p>
+                <p className="text-2xl font-bold text-green-900 mt-1">{stats.completed}</p>
+              </div>
+              <div className="p-2 bg-green-100 rounded-lg">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7-Day Calendar (only for scheduled view) */}
+      {viewMode === 'scheduled' && (
+        <div className="px-6 py-3 bg-white border-b border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-900">Next 7 Days</h3>
+            {selectedDate && (
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="text-xs text-primary-600 hover:text-primary-400 transition-colors"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {next7Days.map((date, index) => {
+              const assignmentsCount = getAssignmentsForDate(date).length;
+              const isSelected = selectedDate && isSameDay(date, selectedDate);
+              const isCurrentDay = isToday(date);
+              
+              return (
+                <button
+                  key={index}
+                  onClick={() => setSelectedDate(isSelected ? null : date)}
+                  className={`p-2 rounded-md transition-all ${
+                    isSelected 
+                      ? 'bg-primary-600 text-white shadow-lg' 
+                      : isCurrentDay
+                      ? 'bg-gray-200 text-blue-600 border border-blue-400'
+                      : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                  }`}
+                >
+                  <div className="text-center">
+                    <p className={`text-xs font-medium ${
+                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-600' : 'text-gray-500'
+                    }`}>
+                      {format(date, 'EEE')}
+                    </p>
+                    <p className={`text-sm font-bold mt-0.5 ${
+                      isSelected ? 'text-white' : isCurrentDay ? 'text-blue-600' : 'text-gray-900'
+                    }`}>
+                      {format(date, 'd')}
+                    </p>
+                    {assignmentsCount > 0 && (
+                      <div className={`mt-1 w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold mx-auto ${
+                        isSelected 
+                          ? 'bg-white text-primary-600'
+                          : isCurrentDay
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-primary-600 text-white'
+                      }`}>
+                        {assignmentsCount}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-auto">
@@ -332,7 +561,185 @@ const Assignments: React.FC = () => {
               </button>
             )}
           </div>
+        ) : viewMode === 'scheduled' ? (
+          // Scheduled View - Group by date
+          <div className="p-6 space-y-6">
+            {Object.entries(groupedAssignments).map(([groupKey, groupAssignments]) => {
+              if (groupAssignments.length === 0) return null;
+              
+              const groupTitles = {
+                overdue: 'Overdue',
+                today: 'Today',
+                tomorrow: 'Tomorrow',
+                thisWeek: 'This Week',
+                later: 'Later'
+              };
+
+              const groupColors = {
+                overdue: 'text-red-600 border-red-200 bg-red-50',
+                today: 'text-orange-600 border-orange-200 bg-orange-50',
+                tomorrow: 'text-blue-600 border-blue-200 bg-blue-50',
+                thisWeek: 'text-purple-600 border-purple-200 bg-purple-50',
+                later: 'text-gray-600 border-gray-200 bg-gray-50'
+              };
+
+              return (
+                <div key={groupKey} className="bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <div className={`px-4 py-3 border-b ${groupColors[groupKey as keyof typeof groupColors]}`}>
+                    <h3 className="font-medium">
+                      {groupTitles[groupKey as keyof typeof groupTitles]} ({groupAssignments.length})
+                    </h3>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {groupAssignments.map((assignment) => {
+                      const progress = getAssignmentProgress(assignment);
+                      const isOverdue = isAssignmentOverdue(assignment);
+                      
+                      return (
+                        <div
+                          key={assignment.taskId}
+                          onClick={() => handleRowClick(assignment)}
+                          className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <Target className="h-5 w-5 text-gray-400" />
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-gray-900">{assignment.title}</h4>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    <span className={`px-2 py-1 text-xs font-medium rounded-full border ${getStatusColor(assignment.status)}`}>
+                                      {ASSIGNMENT_STATUSES.find(s => s.value === assignment.status)?.label}
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-16 bg-gray-200 rounded-full h-2">
+                                        <div
+                                          className={`h-2 rounded-full ${
+                                            assignment.status === 'done' ? 'bg-green-500' : 'bg-primary-500'
+                                          }`}
+                                          style={{ width: `${progress}%` }}
+                                        ></div>
+                                      </div>
+                                      <span className="text-xs text-gray-600">{Math.round(progress)}%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                <span>📋 ID: {assignment.taskId}</span>
+                                {assignment.dueDate && (
+                                  <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                                    📅 {format(toDate(assignment.dueDate), 'MMM d, yyyy')}
+                                    {isOverdue && ' (Overdue)'}
+                                  </span>
+                                )}
+                                <span>📝 {assignment.checklist.filter(item => item.completed).length} / {assignment.checklist.length} tasks</span>
+                              </div>
+                              {assignment.details && (
+                                <p className="text-sm text-gray-600 mt-2">{assignment.details}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {Object.values(groupedAssignments).every(group => group.length === 0) && (
+              <div className="text-center py-12 text-gray-500">
+                <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p className="text-lg font-medium">No scheduled assignments found</p>
+                <p className="text-sm mt-1">All assignments are completed or try adjusting your search.</p>
+              </div>
+            )}
+          </div>
+        ) : viewMode === 'board' ? (
+          // Board View - Kanban style
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {ASSIGNMENT_STATUSES.map((status) => {
+                const statusAssignments = filteredAndSortedAssignments.filter(a => a.status === status.value);
+                
+                return (
+                  <div key={status.value} className="bg-gray-100 rounded-lg">
+                    <div className="p-4 border-b border-gray-200">
+                      <h3 className="font-medium text-gray-900 flex items-center gap-2">
+                        <span className={`w-3 h-3 rounded-full ${getStatusColor(status.value).split(' ')[0]}`}></span>
+                        {status.label}
+                        <span className="ml-auto bg-gray-200 text-gray-600 px-2 py-1 rounded-full text-xs font-medium">
+                          {statusAssignments.length}
+                        </span>
+                      </h3>
+                    </div>
+                    <div className="p-4 space-y-3 max-h-96 overflow-y-auto">
+                      {statusAssignments.map((assignment) => {
+                        const progress = getAssignmentProgress(assignment);
+                        const isOverdue = isAssignmentOverdue(assignment);
+                        
+                        return (
+                          <div
+                            key={assignment.taskId}
+                            onClick={() => handleRowClick(assignment)}
+                            className="bg-white rounded-lg p-3 border border-gray-200 hover:shadow-md cursor-pointer transition-all"
+                          >
+                            <div className="flex items-start gap-2">
+                              <Target className="h-4 w-4 text-gray-400 mt-0.5" />
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-gray-900 text-sm truncate">{assignment.title}</h4>
+                                <p className="text-xs text-gray-500 mt-1">ID: {assignment.taskId}</p>
+                                
+                                {/* Progress Bar */}
+                                <div className="flex items-center gap-2 mt-2">
+                                  <div className="flex-1 bg-gray-200 rounded-full h-1.5">
+                                    <div
+                                      className={`h-1.5 rounded-full ${
+                                        assignment.status === 'done' ? 'bg-green-500' : 'bg-primary-500'
+                                      }`}
+                                      style={{ width: `${progress}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-xs text-gray-600">{Math.round(progress)}%</span>
+                                </div>
+                                
+                                {/* Due Date */}
+                                {assignment.dueDate && (
+                                  <div className={`text-xs mt-2 flex items-center gap-1 ${
+                                    isOverdue ? 'text-red-600' : 'text-gray-500'
+                                  }`}>
+                                    <Calendar className="h-3 w-3" />
+                                    {format(toDate(assignment.dueDate), 'MMM d')}
+                                    {isOverdue && ' (Overdue)'}
+                                  </div>
+                                )}
+                                
+                                {/* Tasks count */}
+                                <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                  <CheckSquare className="h-3 w-3" />
+                                  {assignment.checklist.filter(item => item.completed).length} / {assignment.checklist.length} tasks
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      
+                      {statusAssignments.length === 0 && (
+                        <div className="text-center py-8 text-gray-400">
+                          <Target className="h-8 w-8 mx-auto mb-2" />
+                          <p className="text-sm">No assignments</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : (
+          // List View - Original table
           <div className="bg-white shadow-sm rounded-lg mx-6 mb-6 overflow-hidden border border-gray-200">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">

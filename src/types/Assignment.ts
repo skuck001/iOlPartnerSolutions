@@ -70,6 +70,17 @@ export interface AddProgressLogEntryRequest {
   message: string;
 }
 
+export interface UpdateProgressLogEntryRequest {
+  taskId: string;
+  entryId: string;
+  message: string;
+}
+
+export interface RemoveProgressLogEntryRequest {
+  taskId: string;
+  entryId: string;
+}
+
 export interface RemoveChecklistItemRequest {
   taskId: string;
   itemId: string;

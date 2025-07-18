@@ -39,19 +39,27 @@ export class AssignmentService {
     const docRef = this.collection.doc();
     const generatedTaskId = docRef.id;
 
-    const assignmentData: Assignment = {
+    const assignmentData: any = {
       taskId: generatedTaskId,
       title: data.title,
-      details: data.details,
       status: data.status || 'todo',
-      dueDate: data.dueDate,
       ownerId: data.ownerId || userId,
-      oneDriveLink: data.oneDriveLink,
       checklist: data.checklist || [],
       progressLog: data.progressLog || [],
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
+
+    // Only include optional fields if they have values
+    if (data.details) {
+      assignmentData.details = data.details;
+    }
+    if (data.dueDate) {
+      assignmentData.dueDate = data.dueDate;
+    }
+    if (data.oneDriveLink) {
+      assignmentData.oneDriveLink = data.oneDriveLink;
+    }
 
     await docRef.set(assignmentData);
 
@@ -145,10 +153,16 @@ export class AssignmentService {
       throw new Error('Assignment not found');
     }
 
-    const newItem: ChecklistItem = {
+    const newItem: any = {
       id: this.db.collection('temp').doc().id, // Generate unique ID
-      ...checklistItem,
+      label: checklistItem.label,
+      completed: checklistItem.completed ?? false,
     };
+
+    // Only include dueDate if it has a value
+    if (checklistItem.dueDate) {
+      newItem.dueDate = checklistItem.dueDate;
+    }
 
     const updatedChecklist = [...assignment.checklist, newItem];
 
@@ -182,12 +196,25 @@ export class AssignmentService {
 
     const updatedChecklist = assignment.checklist.map(item => {
       if (item.id === itemId) {
-        const updatedItem = { ...item, ...updateData };
+        const updatedItem = { ...item };
+        
+        // Update fields only if they have values
+        if (updateData.label !== undefined && updateData.label !== null) {
+          updatedItem.label = updateData.label;
+        }
+        if (updateData.completed !== undefined && updateData.completed !== null) {
+          updatedItem.completed = updateData.completed;
+        }
+        if (updateData.dueDate !== undefined && updateData.dueDate !== null) {
+          updatedItem.dueDate = updateData.dueDate;
+        }
+        
         // Set completedAt timestamp when marking as completed
         if (updateData.completed === true && !item.completed) {
           updatedItem.completedAt = Timestamp.now();
-        } else if (updateData.completed === false) {
-          updatedItem.completedAt = undefined;
+        } else if (updateData.completed === false && updatedItem.completedAt) {
+          // Remove completedAt field when unchecking
+          delete updatedItem.completedAt;
         }
         return updatedItem;
       }
@@ -275,6 +302,76 @@ export class AssignmentService {
       data: {
         action: 'Progress log entry added',
         message: newEntry.message
+      }
+    });
+
+    const updated = await docRef.get();
+    return updated.data() as Assignment;
+  }
+
+  async updateProgressLogEntry(taskId: string, entryId: string, message: string, userId: string): Promise<Assignment> {
+    const docRef = this.collection.doc(taskId);
+    const assignment = await this.getAssignment(taskId);
+    
+    if (!assignment) {
+      throw new Error('Assignment not found');
+    }
+
+    const updatedProgressLog = assignment.progressLog.map(entry => {
+      if (entry.id === entryId) {
+        return {
+          ...entry,
+          message,
+          timestamp: Timestamp.now(), // Update timestamp when editing
+        };
+      }
+      return entry;
+    });
+
+    await docRef.update({
+      progressLog: updatedProgressLog,
+      updatedAt: Timestamp.now(),
+    });
+
+    await AuditService.log({
+      userId,
+      action: 'update',
+      resourceType: 'assignment',
+      resourceId: taskId,
+      data: {
+        action: 'Progress log entry updated',
+        entryId,
+        message
+      }
+    });
+
+    const updated = await docRef.get();
+    return updated.data() as Assignment;
+  }
+
+  async removeProgressLogEntry(taskId: string, entryId: string, userId: string): Promise<Assignment> {
+    const docRef = this.collection.doc(taskId);
+    const assignment = await this.getAssignment(taskId);
+    
+    if (!assignment) {
+      throw new Error('Assignment not found');
+    }
+
+    const updatedProgressLog = assignment.progressLog.filter(entry => entry.id !== entryId);
+
+    await docRef.update({
+      progressLog: updatedProgressLog,
+      updatedAt: Timestamp.now(),
+    });
+
+    await AuditService.log({
+      userId,
+      action: 'update',
+      resourceType: 'assignment',
+      resourceId: taskId,
+      data: {
+        action: 'Progress log entry removed',
+        entryId
       }
     });
 

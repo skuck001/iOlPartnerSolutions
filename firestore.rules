@@ -30,6 +30,10 @@ service cloud.firestore {
       allow read, write: if false; // Block all direct access - use Cloud Functions
     }
     
+    match /assignments/{document} {
+      allow read, write: if false; // Block all direct access - use Cloud Functions
+    }
+    
     // Audit logs - read access for users to see their own actions, no write access (Cloud Functions only)
     match /audit_logs/{document} {
       allow read: if request.auth != null 

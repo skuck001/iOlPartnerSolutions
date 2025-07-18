@@ -96,6 +96,17 @@ export const ProgressLogEntrySchema = z.object({
   message: z.string().min(1, 'Message is required'),
 });
 
+export const UpdateProgressLogEntrySchema = z.object({
+  taskId: z.string().min(1, 'Task ID is required'),
+  entryId: z.string().min(1, 'Entry ID is required'),
+  message: z.string().min(1, 'Message is required'),
+});
+
+export const RemoveProgressLogEntrySchema = z.object({
+  taskId: z.string().min(1, 'Task ID is required'),
+  entryId: z.string().min(1, 'Entry ID is required'),
+});
+
 // Create Assignment
 export const createAssignment = onCall(
   { 
@@ -377,4 +388,54 @@ export const addProgressLogEntry = onCall(
     console.log(`✅ Progress log entry added to assignment: ${taskId}`);
     return result;
   }, { functionName: 'addProgressLogEntry', action: 'PROGRESS_LOG_ADD' })
+);
+
+// Update Progress Log Entry
+export const updateProgressLogEntry = onCall(
+  { 
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], 
+    maxInstances: 10 
+  },
+  withErrorHandling(async (request) => {
+    const user = await authenticateUser(request.auth);
+    
+    await RateLimiter.checkLimit(
+      user.uid, 
+      RateLimitPresets.write.maxRequests, 
+      RateLimitPresets.write.windowMs, 
+      'updateProgressLogEntry'
+    );
+    
+    const { taskId, entryId, message } = validateData(UpdateProgressLogEntrySchema, request.data);
+    
+    const result = await assignmentService.updateProgressLogEntry(taskId, entryId, message, user.uid);
+    
+    console.log(`✅ Progress log entry updated in assignment: ${taskId}`);
+    return result;
+  }, { functionName: 'updateProgressLogEntry', action: 'PROGRESS_LOG_UPDATE' })
+);
+
+// Remove Progress Log Entry
+export const removeProgressLogEntry = onCall(
+  { 
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], 
+    maxInstances: 10 
+  },
+  withErrorHandling(async (request) => {
+    const user = await authenticateUser(request.auth);
+    
+    await RateLimiter.checkLimit(
+      user.uid, 
+      RateLimitPresets.write.maxRequests, 
+      RateLimitPresets.write.windowMs, 
+      'removeProgressLogEntry'
+    );
+    
+    const { taskId, entryId } = validateData(RemoveProgressLogEntrySchema, request.data);
+    
+    const result = await assignmentService.removeProgressLogEntry(taskId, entryId, user.uid);
+    
+    console.log(`✅ Progress log entry removed from assignment: ${taskId}`);
+    return result;
+  }, { functionName: 'removeProgressLogEntry', action: 'PROGRESS_LOG_REMOVE' })
 ); 

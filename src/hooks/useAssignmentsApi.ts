@@ -7,6 +7,8 @@ import type {
   AddChecklistItemRequest,
   UpdateChecklistItemRequest,
   AddProgressLogEntryRequest,
+  UpdateProgressLogEntryRequest,
+  RemoveProgressLogEntryRequest,
   RemoveChecklistItemRequest
 } from '../types';
 
@@ -98,6 +100,28 @@ export const useAssignmentsApi = () => {
     return result;
   }, [callFunction]);
 
+  const updateProgressLogEntry = useCallback(async (data: UpdateProgressLogEntryRequest): Promise<Assignment> => {
+    const result = await callFunction('updateProgressLogEntry', data);
+    
+    // Update local state
+    setAssignments(prev => prev.map(assignment => 
+      assignment.taskId === data.taskId ? result : assignment
+    ));
+    
+    return result;
+  }, [callFunction]);
+
+  const removeProgressLogEntry = useCallback(async (data: RemoveProgressLogEntryRequest): Promise<Assignment> => {
+    const result = await callFunction('removeProgressLogEntry', data);
+    
+    // Update local state
+    setAssignments(prev => prev.map(assignment => 
+      assignment.taskId === data.taskId ? result : assignment
+    ));
+    
+    return result;
+  }, [callFunction]);
+
   // Helper functions for better UX
   const getAssignmentsByStatus = useCallback((status: 'todo' | 'in_progress' | 'done') => {
     return assignments.filter(assignment => assignment.status === status);
@@ -121,6 +145,8 @@ export const useAssignmentsApi = () => {
     updateChecklistItem,
     removeChecklistItem,
     addProgressLogEntry,
+    updateProgressLogEntry,
+    removeProgressLogEntry,
     getAssignmentsByStatus,
     getAssignmentProgress,
     loading,

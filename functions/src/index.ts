@@ -108,7 +108,9 @@ export {
   addChecklistItem,
   updateChecklistItem,
   removeChecklistItem,
-  addProgressLogEntry
+  addProgressLogEntry,
+  updateProgressLogEntry,
+  removeProgressLogEntry
 } from './modules/assignments/assignments.functions';
 
 // Export dashboard batch functions

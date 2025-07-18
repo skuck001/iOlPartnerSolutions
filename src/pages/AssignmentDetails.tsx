@@ -42,6 +42,8 @@ const AssignmentDetails: React.FC = () => {
     updateChecklistItem,
     removeChecklistItem,
     addProgressLogEntry,
+    updateProgressLogEntry,
+    removeProgressLogEntry,
     loading,
     error
   } = useAssignmentsApi();
@@ -52,6 +54,8 @@ const AssignmentDetails: React.FC = () => {
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [newProgressEntry, setNewProgressEntry] = useState('');
   const [showCompletedChecklist, setShowCompletedChecklist] = useState(false);
+  const [editingProgressEntry, setEditingProgressEntry] = useState<string | null>(null);
+  const [editProgressText, setEditProgressText] = useState('');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -264,6 +268,45 @@ const AssignmentDetails: React.FC = () => {
       setNewProgressEntry('');
     } catch (err) {
       console.error('Failed to add progress entry:', err);
+    }
+  };
+
+  const handleEditProgressEntry = (entryId: string, currentMessage: string) => {
+    setEditingProgressEntry(entryId);
+    setEditProgressText(currentMessage);
+  };
+
+  const handleSaveProgressEntry = async () => {
+    if (!assignment || !editingProgressEntry || !editProgressText.trim()) return;
+    try {
+      const updated = await updateProgressLogEntry({
+        taskId: assignment.taskId,
+        entryId: editingProgressEntry,
+        message: editProgressText.trim()
+      });
+      setAssignment(updated);
+      setEditingProgressEntry(null);
+      setEditProgressText('');
+    } catch (err) {
+      console.error('Failed to update progress entry:', err);
+    }
+  };
+
+  const handleCancelEditProgressEntry = () => {
+    setEditingProgressEntry(null);
+    setEditProgressText('');
+  };
+
+  const handleDeleteProgressEntry = async (entryId: string) => {
+    if (!assignment || !confirm('Are you sure you want to delete this progress update?')) return;
+    try {
+      const updated = await removeProgressLogEntry({
+        taskId: assignment.taskId,
+        entryId
+      });
+      setAssignment(updated);
+    } catch (err) {
+      console.error('Failed to delete progress entry:', err);
     }
   };
 
@@ -757,11 +800,73 @@ const AssignmentDetails: React.FC = () => {
                       {assignment.progressLog
                         .sort((a, b) => b.timestamp.seconds - a.timestamp.seconds)
                         .map((entry) => (
-                          <div key={entry.id} className="border-l-4 border-primary-200 pl-4 py-2">
-                            <p className="text-sm text-gray-900">{entry.message}</p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {format(safeDateConversion(entry.timestamp), 'MMM d, yyyy • h:mm a')}
-                            </p>
+                          <div key={entry.id} className="border-l-4 border-primary-200 pl-4 py-2 pr-2">
+                            {editingProgressEntry === entry.id ? (
+                              // Editing mode
+                              <div className="space-y-2">
+                                <textarea
+                                  value={editProgressText}
+                                  onChange={(e) => setEditProgressText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && e.ctrlKey) {
+                                      e.preventDefault();
+                                      handleSaveProgressEntry();
+                                    } else if (e.key === 'Escape') {
+                                      e.preventDefault();
+                                      handleCancelEditProgressEntry();
+                                    }
+                                  }}
+                                  rows={2}
+                                  className="w-full text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                  placeholder="Edit progress update... (Ctrl+Enter to save, Esc to cancel)"
+                                  autoFocus
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={handleSaveProgressEntry}
+                                    className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleCancelEditProgressEntry}
+                                    className="px-2 py-1 text-xs bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              // Display mode
+                              <div className="flex items-start justify-between group">
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-900">{entry.message}</p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {format(safeDateConversion(entry.timestamp), 'MMM d, yyyy • h:mm a')}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditProgressEntry(entry.id, entry.message)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                                    title="Edit progress update"
+                                  >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteProgressEntry(entry.id)}
+                                    className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                    title="Delete progress update"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       {assignment.progressLog.length === 0 && (
