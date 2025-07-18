@@ -45,6 +45,7 @@ const CreateOpportunitySchema = z.object({
   lastActivityDate: z.any().optional(), // Timestamp
   productId: z.string().nullish(),
   contactIds: z.array(z.string()),
+  iolProducts: z.array(z.string()).optional(),
   notes: z.string().nullish(),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
@@ -75,6 +76,7 @@ const UpdateOpportunitySchema = z.object({
   lastActivityDate: z.any().optional(), // Timestamp
   productId: z.string().nullish(),
   contactIds: z.array(z.string()).optional(),
+  iolProducts: z.array(z.string()).optional(),
   notes: z.string().nullish(),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),

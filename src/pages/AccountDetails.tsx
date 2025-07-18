@@ -165,13 +165,10 @@ export const AccountDetails: React.FC = () => {
 
       if (isNew || !id) {
         const newAccount = await createAccount({
-          name: cleanData.name,
-          region: cleanData.region,
-          website: cleanData.website,
-          parentAccountId: cleanData.parentAccountId,
-          tags: cleanData.tags,
-          notes: cleanData.notes,
-          ownerId: cleanData.ownerId
+          name: Array.isArray(cleanData.name) ? cleanData.name[0] : cleanData.name,
+          region: Array.isArray(cleanData.region) ? cleanData.region[0] : cleanData.region,
+          website: Array.isArray(cleanData.website) ? cleanData.website[0] : cleanData.website,
+          tags: Array.isArray(cleanData.tags) ? cleanData.tags : [cleanData.tags].filter(Boolean)
         });
         console.log('Account created:', newAccount);
         navigate('/accounts');
@@ -655,9 +652,12 @@ export const AccountDetails: React.FC = () => {
                               if ((timestamp as any)?.seconds) {
                                 // Firestore Timestamp format
                                 date = new Date((timestamp as any).seconds * 1000);
+                              } else if ((timestamp as any)?.toDate) {
+                                // Firestore Timestamp with toDate method
+                                date = (timestamp as any).toDate();
                               } else if (timestamp) {
                                 // Regular date string or Date object
-                                date = new Date(timestamp);
+                                date = new Date(timestamp as unknown as string | number | Date);
                               } else {
                                 return 'N/A';
                               }
