@@ -57,6 +57,7 @@ import { useActivityManager } from '../hooks/useActivityManager';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 import { useContactsApi } from '../hooks/useContactsApi';
 import { useDataContext } from '../context/DataContext';
+import * as XLSX from 'xlsx';
 
 const OPPORTUNITY_STAGES: OpportunityStage[] = ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost'];
 const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
@@ -758,6 +759,52 @@ export const OpportunityDetails: React.FC = () => {
       </div>
     );
   }
+
+  // Helper to get last and next activity
+  const getLastAndNextActivity = () => {
+    if (!formData.activities || formData.activities.length === 0) return { last: null, next: null };
+    const sorted = [...formData.activities].sort((a, b) => safeDateConversion(a.dateTime).getTime() - safeDateConversion(b.dateTime).getTime());
+    const now = new Date();
+    const past = sorted.filter(a => safeDateConversion(a.dateTime) <= now && a.status === 'Completed');
+    const future = sorted.filter(a => safeDateConversion(a.dateTime) > now && a.status === 'Scheduled');
+    return {
+      last: past.length > 0 ? past[past.length - 1] : null,
+      next: future.length > 0 ? future[0] : null
+    };
+  };
+
+  // Excel export function
+  const exportOpportunityToExcel = () => {
+    if (!opportunity) return;
+    const { last, next } = getLastAndNextActivity();
+    const exportData = [{
+      'Opportunity Title': formData.title,
+      'Account': account?.name || '',
+      'Product': product?.name || '',
+      'Stage': formData.stage,
+      'Priority': formData.priority,
+      'Deal Value': formData.estimatedDealValue,
+      'Expected Close Date': formData.expectedCloseDate ? format(formData.expectedCloseDate, 'yyyy-MM-dd') : '',
+      'Commercial Model': formData.commercialModel,
+      'Potential Volume': formData.potentialVolume,
+      'iOL Products': formData.iolProducts.join(', '),
+      'Executive Summary': localAiSummary || opportunity.aiSummary || '',
+      'Notes': formData.notes,
+      'Tags': formData.tags.join(', '),
+      'Created Date': opportunity.createdAt ? format(safeDateConversion(opportunity.createdAt), 'yyyy-MM-dd') : '',
+      'Last Updated': opportunity.updatedAt ? format(safeDateConversion(opportunity.updatedAt), 'yyyy-MM-dd') : '',
+      'Last Activity Date': last ? format(safeDateConversion(last.dateTime), 'yyyy-MM-dd HH:mm') : '',
+      'Last Activity Subject': last?.subject || '',
+      'Last Activity Notes': last?.notes || '',
+      'Next Activity Date': next ? format(safeDateConversion(next.dateTime), 'yyyy-MM-dd HH:mm') : '',
+      'Next Activity Subject': next?.subject || '',
+      'Next Activity Notes': next?.notes || ''
+    }];
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Opportunity');
+    XLSX.writeFile(workbook, `opportunity_${formData.title.replace(/[^a-zA-Z0-9]/g, '_')}_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+  };
 
   return (
     <div className="h-full flex flex-col relative">
@@ -2142,6 +2189,18 @@ export const OpportunityDetails: React.FC = () => {
           onCancel={activityManager.closeActivityCompletion}
           isOpen={activityManager.isModalOpen}
         />
+      )}
+
+      {!isNew && (
+        <button
+          type="button"
+          onClick={exportOpportunityToExcel}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors mb-2"
+          title="Export Opportunity to Excel"
+        >
+          <FileText className="h-4 w-4" />
+          Export to Excel
+        </button>
       )}
     </div>
   );

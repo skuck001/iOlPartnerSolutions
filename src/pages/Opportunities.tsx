@@ -377,11 +377,13 @@ export const Opportunities: React.FC = () => {
           : '',
         'Next Activity Subject': nextScheduled?.subject || '',
         'Next Activity Type': nextScheduled?.activityType || '',
+        'Next Activity Details': nextScheduled?.details || nextScheduled?.notes || '',
         'Last Activity Date': lastCompleted 
           ? format(toDate(lastCompleted.dateTime), 'yyyy-MM-dd HH:mm') 
           : '',
         'Last Activity Subject': lastCompleted?.subject || '',
         'Last Activity Type': lastCompleted?.activityType || '',
+        'Last Activity Details': lastCompleted?.details || lastCompleted?.notes || '',
         'Contact Count': opportunityContacts.length,
         'Primary Contact': opportunityContacts[0]?.name || '',
         'Primary Contact Email': opportunityContacts[0]?.email || '',

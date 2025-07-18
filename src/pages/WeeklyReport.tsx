@@ -408,8 +408,11 @@ export const WeeklyReport: React.FC = () => {
       'iOL Products',
       'Commercial Model',
       'Expected Close Date',
+      'Executive Summary',
       'Last Activity',
+      'Last Activity Details',
       'Next Activity',
+      'Next Activity Details',
       'Weekly Changes',
       'Risk Factors'
     ];
@@ -425,8 +428,11 @@ export const WeeklyReport: React.FC = () => {
         progress.opportunity.iolProducts?.join(', ') || '',
         progress.opportunity.commercialModel || '',
         progress.opportunity.expectedCloseDate ? format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM d, yyyy') : '',
+        progress.opportunity.aiSummary || '',
         progress.lastActivity ? `${progress.lastActivity.subject} (${format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d')})` : 'No recent activity',
+        progress.lastActivity ? (progress.lastActivity.details || progress.lastActivity.notes || '') : '',
         progress.nextActivity ? `${progress.nextActivity.subject} (${format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d')})` : 'No scheduled activity',
+        progress.nextActivity ? (progress.nextActivity.details || progress.nextActivity.notes || '') : '',
         progress.weeklyChanges.join('; '),
         progress.riskFactors.join('; ')
       ])
@@ -723,27 +729,6 @@ export const WeeklyReport: React.FC = () => {
               }}
               className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-            <button
-              onClick={copyToClipboard}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
-            >
-              <Copy className="h-4 w-4" />
-              Copy for Email
-            </button>
-            <button
-              onClick={copyOpportunityCards}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
-            >
-              <Copy className="h-4 w-4" />
-              Copy Cards
-            </button>
-            <button
-              onClick={openInOutlook}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-            >
-              <Mail className="h-4 w-4" />
-              Open in Outlook
-            </button>
             <button
               onClick={exportToExcel}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
