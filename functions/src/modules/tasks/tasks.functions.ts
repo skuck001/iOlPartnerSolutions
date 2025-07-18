@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { validateData } from '../../shared/validation.middleware';
+import { validateData, ValidationError } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { TasksService, TasksQueryOptions, ActivitiesQueryOptions } from './tasks.service';
@@ -30,13 +30,13 @@ const TasksQuerySchema = z.object({
 
 const CreateTaskSchema = z.object({
   title: z.string().min(1),
-  opportunityId: z.string().optional(),
+  opportunityId: z.string().nullish().transform(val => val ?? undefined),
   assignedTo: z.string().min(1),
   ownerId: z.string().min(1),
   dueDate: z.any(), // Timestamp
   status: z.enum(['To do', 'In progress', 'Done']).default('To do'),
-  bucket: z.string().optional(),
-  description: z.string().optional()
+  bucket: z.string().nullish().transform(val => val ?? undefined),
+  description: z.string().nullish().transform(val => val ?? undefined)
 });
 
 const UpdateTaskSchema = z.object({
@@ -123,6 +123,13 @@ export const getTasks = onCall(
     return { success: true, ...result };
   } catch (error) {
     console.error('Error getting tasks:', error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    if (error instanceof ValidationError) {
+      console.error('Validation errors:', error.errors);
+      throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+    }
     throw new HttpsError('internal', error instanceof Error ? error.message : 'Failed to get tasks');
   }
 });
@@ -149,6 +156,13 @@ export const getTask = onCall(
     return { success: true, task };
   } catch (error) {
     console.error('Error getting task:', error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    if (error instanceof ValidationError) {
+      console.error('Validation errors:', error.errors);
+      throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+    }
     throw new HttpsError('internal', error instanceof Error ? error.message : 'Failed to get task');
   }
 });
@@ -167,6 +181,13 @@ export const createTask = onCall(
     return { success: true, task };
   } catch (error) {
     console.error('Error creating task:', error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    if (error instanceof ValidationError) {
+      console.error('Validation errors:', error.errors);
+      throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+    }
     throw new HttpsError('internal', error instanceof Error ? error.message : 'Failed to create task');
   }
 });
@@ -191,6 +212,13 @@ export const updateTask = onCall(
     return { success: true, task };
   } catch (error) {
     console.error('Error updating task:', error);
+    if (error instanceof HttpsError) {
+      throw error;
+    }
+    if (error instanceof ValidationError) {
+      console.error('Validation errors:', error.errors);
+      throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+    }
     throw new HttpsError('internal', error instanceof Error ? error.message : 'Failed to update task');
   }
 });

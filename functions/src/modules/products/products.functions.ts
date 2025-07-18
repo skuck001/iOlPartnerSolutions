@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { validateData } from '../../shared/validation.middleware';
+import { validateData, ValidationError } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { ProductsService, ProductFilters, ProductsQueryOptions } from './products.service';
@@ -13,9 +13,9 @@ const productsService = new ProductsService(db);
 const ProductFiltersSchema = z.object({
   ownerId: z.string().optional(),
   accountId: z.string().optional(),
-  category: z.enum(['GDS', 'PMS', 'CRS', 'API', 'Middleware', 'Other']).optional(),
-  subcategory: z.enum(['Booking Engine', 'Payment Gateway', 'Property Management', 'Channel Manager', 'Rate Management', 'Analytics', 'Integration Platform', 'API Gateway', 'Other']).optional(),
-  status: z.string().optional(),
+  category: z.enum(['Business Intelligence', 'Revenue Management', 'Distribution', 'Guest Experience', 'Operations', 'Connectivity', 'Booking Engine', 'Channel Management', 'Other']).optional(),
+  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).optional(),
+  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).optional(),
   businessType: z.string().optional(),
   search: z.string().optional(),
   version: z.string().optional()
@@ -32,34 +32,32 @@ const ProductsQuerySchema = z.object({
 const CreateProductSchema = z.object({
   name: z.string().min(1),
   accountId: z.string().min(1),
-  category: z.enum(['GDS', 'PMS', 'CRS', 'API', 'Middleware', 'Other']),
-  subcategory: z.enum(['Booking Engine', 'Payment Gateway', 'Property Management', 'Channel Manager', 'Rate Management', 'Analytics', 'Integration Platform', 'API Gateway', 'Other']).optional(),
-  description: z.string().optional(),
-  businessType: z.string().optional(),
-  status: z.string().optional(),
-  version: z.string().optional(),
-  features: z.array(z.string()).optional(),
-  integrations: z.array(z.string()).optional(),
-  documentation: z.string().optional(),
-  support: z.string().optional(),
-  pricing: z.string().optional(),
-  tags: z.array(z.string()).optional()
+  category: z.enum(['Business Intelligence', 'Revenue Management', 'Distribution', 'Guest Experience', 'Operations', 'Connectivity', 'Booking Engine', 'Channel Management', 'Other']),
+  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).nullish().transform(val => val ?? undefined),
+  description: z.string().nullish().transform(val => val ?? undefined),
+  version: z.string().nullish().transform(val => val ?? undefined),
+  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).nullish().transform(val => val ?? undefined),
+  website: z.string().nullish().transform(val => val ?? undefined),
+  contactIds: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  targetMarket: z.string().nullish().transform(val => val ?? undefined),
+  pricing: z.string().nullish().transform(val => val ?? undefined),
+  notes: z.string().nullish().transform(val => val ?? undefined)
 });
 
 const UpdateProductSchema = z.object({
   name: z.string().min(1).optional(),
-  category: z.enum(['GDS', 'PMS', 'CRS', 'API', 'Middleware', 'Other']).optional(),
-  subcategory: z.enum(['Booking Engine', 'Payment Gateway', 'Property Management', 'Channel Manager', 'Rate Management', 'Analytics', 'Integration Platform', 'API Gateway', 'Other']).optional(),
+  category: z.enum(['Business Intelligence', 'Revenue Management', 'Distribution', 'Guest Experience', 'Operations', 'Connectivity', 'Booking Engine', 'Channel Management', 'Other']).optional(),
+  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).optional(),
   description: z.string().nullish().transform(val => val ?? undefined),
-  businessType: z.string().nullish().transform(val => val ?? undefined),
-  status: z.string().nullish().transform(val => val ?? undefined),
   version: z.string().nullish().transform(val => val ?? undefined),
-  features: z.array(z.string()).optional(),
-  integrations: z.array(z.string()).optional(),
-  documentation: z.string().nullish().transform(val => val ?? undefined),
-  support: z.string().nullish().transform(val => val ?? undefined),
-  pricing: z.string().nullish().transform(val => val ?? undefined),
+  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).nullish().transform(val => val ?? undefined),
+  website: z.string().nullish().transform(val => val ?? undefined),
+  contactIds: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
+  targetMarket: z.string().nullish().transform(val => val ?? undefined),
+  pricing: z.string().nullish().transform(val => val ?? undefined),
+  notes: z.string().nullish().transform(val => val ?? undefined),
   ownerId: z.string().optional()
 });
 
@@ -85,8 +83,8 @@ export const getProducts = onCall(
       const options: ProductsQueryOptions = {
         ...validatedData,
         filters: {
-          ...validatedData.filters,
-          ownerId: user.uid // Always filter by current user
+          ...validatedData.filters
+          // Removed ownerId filter - allow access to all products
         }
       };
 
@@ -127,10 +125,7 @@ export const getProduct = onCall(
         throw new HttpsError('not-found', 'Product not found');
       }
 
-      // Check ownership
-      if (product.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow access to all products
 
       return {
         success: true,
@@ -168,6 +163,10 @@ export const createProduct = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+      }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
       }
@@ -192,14 +191,12 @@ export const updateProduct = onCall(
 
       const validatedData = validateData(UpdateProductSchema, request.data.updates);
 
-      // Check if product exists and user owns it
+      // Check if product exists - removed ownership check
       const existingProduct = await productsService.getProduct(request.data.productId);
       if (!existingProduct) {
         throw new HttpsError('not-found', 'Product not found');
       }
-      if (existingProduct.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow updates to all products
 
       const updatedProduct = await productsService.updateProduct(
         request.data.productId,
@@ -215,6 +212,10 @@ export const updateProduct = onCall(
       console.error('Error in updateProduct:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
@@ -238,14 +239,12 @@ export const deleteProduct = onCall(
         throw new HttpsError('invalid-argument', 'Product ID is required');
       }
 
-      // Check if product exists and user owns it
+      // Check if product exists - removed ownership check
       const existingProduct = await productsService.getProduct(request.data.productId);
       if (!existingProduct) {
         throw new HttpsError('not-found', 'Product not found');
       }
-      if (existingProduct.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow deletion of all products
 
       await productsService.deleteProduct(request.data.productId, user.uid);
 
@@ -257,6 +256,10 @@ export const deleteProduct = onCall(
       console.error('Error in deleteProduct:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
@@ -278,8 +281,8 @@ export const getProductsStats = onCall(
       const validatedData = validateData(ProductFiltersSchema, request.data || {});
 
       const filters: ProductFilters = {
-        ...validatedData,
-        ownerId: user.uid // Always filter by current user
+        ...validatedData
+        // Removed ownerId filter - allow stats for all products
       };
 
       const stats = await productsService.getProductsStats(filters);
@@ -309,13 +312,14 @@ export const bulkUpdateProducts = onCall(
       await RateLimiter.checkLimit(user.uid, RateLimitPresets.heavy.maxRequests, RateLimitPresets.heavy.windowMs, 'bulkUpdateProducts');
       const validatedData = validateData(BulkUpdateProductsSchema, request.data);
 
-      // Verify ownership of all products
+      // Verify all products exist - removed ownership verification
       for (const update of validatedData.updates) {
         const product = await productsService.getProduct(update.id);
-        if (!product || product.ownerId !== user.uid) {
-          throw new HttpsError('permission-denied', `Access denied for product ${update.id}`);
+        if (!product) {
+          throw new HttpsError('not-found', `Product not found: ${update.id}`);
         }
       }
+      // Removed ownership checks - allow bulk updates to all products
 
       const updatedProducts = await productsService.bulkUpdateProducts(
         validatedData.updates,
@@ -330,6 +334,10 @@ export const bulkUpdateProducts = onCall(
       console.error('Error in bulkUpdateProducts:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);

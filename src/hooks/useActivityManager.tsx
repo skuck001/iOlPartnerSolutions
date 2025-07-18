@@ -1,15 +1,15 @@
 import { useState, useCallback } from 'react';
 import { Timestamp } from 'firebase/firestore';
-import { updateDocument } from '../lib/firestore';
 import { useAuth } from './useAuth';
 import type { Activity, ActivityStatus, Opportunity } from '../types';
 
 interface UseActivityManagerProps {
   opportunities: Opportunity[];
   onDataRefresh: () => Promise<void>;
+  updateOpportunity: (opportunityId: string, updates: Partial<Opportunity>) => Promise<Opportunity>;
 }
 
-export const useActivityManager = ({ opportunities, onDataRefresh }: UseActivityManagerProps) => {
+export const useActivityManager = ({ opportunities, onDataRefresh, updateOpportunity }: UseActivityManagerProps) => {
   const { currentUser } = useAuth();
   const [activeActivity, setActiveActivity] = useState<Activity | null>(null);
   const [activityContext, setActivityContext] = useState<{
@@ -90,11 +90,10 @@ export const useActivityManager = ({ opportunities, onDataRefresh }: UseActivity
         updatedActivities.push(newFollowUpActivity);
       }
 
-      // Update the opportunity in the database
-      await updateDocument('opportunities', activityContext.opportunityId, {
+      // Update the opportunity in the database using the proper API
+      await updateOpportunity(activityContext.opportunityId, {
         activities: updatedActivities,
-        lastActivityDate: now,
-        updatedAt: now
+        lastActivityDate: now
       });
 
       // Close modal and refresh data
@@ -132,9 +131,8 @@ export const useActivityManager = ({ opportunities, onDataRefresh }: UseActivity
           : activity
       );
 
-      await updateDocument('opportunities', opportunityId, {
-        activities: updatedActivities,
-        updatedAt: now
+      await updateOpportunity(opportunityId, {
+        activities: updatedActivities
       });
 
       await onDataRefresh();
@@ -157,9 +155,8 @@ export const useActivityManager = ({ opportunities, onDataRefresh }: UseActivity
 
       const updatedActivities = opportunity.activities.filter(a => a.id !== activityId);
 
-      await updateDocument('opportunities', opportunityId, {
-        activities: updatedActivities,
-        updatedAt: Timestamp.now()
+      await updateOpportunity(opportunityId, {
+        activities: updatedActivities
       });
 
       await onDataRefresh();

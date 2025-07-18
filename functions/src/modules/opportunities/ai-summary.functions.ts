@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Timestamp } from 'firebase-admin/firestore';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { AISummaryService } from './ai-summary.service';
@@ -199,5 +200,129 @@ export const testFirebaseConnection = onCall({
   } catch (error: any) {
     console.error('❌ Test function error:', error);
     throw error;
+  }
+});
+
+/**
+ * Scheduled function to generate AI summaries for all opportunities
+ * Runs every night at midnight UTC
+ */
+export const generateAISummariesNightly = onSchedule({
+  schedule: '0 0 * * *', // Every day at midnight UTC
+  timeZone: 'UTC',
+  region: 'us-central1',
+  memory: '512MiB',
+  secrets: [googleAiApiKey, openaiApiKey],
+}, async (event) => {
+  const startTime = Date.now();
+  console.log('🌙 Nightly AI Summary Generation Started');
+  console.log('⏰ Scheduled Time:', event.scheduleTime);
+  console.log('🕛 Actual Execution Time:', new Date().toISOString());
+
+  try {
+    const db = getFirestore();
+    const opportunitiesService = getOpportunitiesService();
+    const aiSummaryService = getAISummaryService();
+
+    console.log('📊 Fetching all opportunities from database...');
+    
+    // Get all opportunities from Firestore
+    const opportunitiesSnapshot = await db.collection('opportunities').get();
+    const totalOpportunities = opportunitiesSnapshot.docs.length;
+    
+    console.log(`📋 Found ${totalOpportunities} opportunities to process`);
+
+    if (totalOpportunities === 0) {
+      console.log('ℹ️ No opportunities found to process');
+      return;
+    }
+
+    let processedCount = 0;
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: string[] = [];
+
+    // Process each opportunity
+    for (const doc of opportunitiesSnapshot.docs) {
+      const opportunityId = doc.id;
+      const opportunityData = doc.data();
+      
+      try {
+        console.log(`🔄 Processing opportunity ${processedCount + 1}/${totalOpportunities}: ${opportunityId}`);
+        console.log(`📝 Title: "${opportunityData.title || 'Untitled'}"`);
+
+        // Fetch the complete opportunity data
+        const opportunity = await opportunitiesService.getOpportunity(opportunityId);
+        
+        if (!opportunity) {
+          console.log(`⚠️ Opportunity ${opportunityId} not found, skipping...`);
+          errorCount++;
+          errors.push(`Opportunity ${opportunityId}: Not found`);
+          continue;
+        }
+
+        // Check if this opportunity needs an AI summary update
+        const needsUpdate = AISummaryService.needsAISummaryUpdate(opportunity, 12);
+        
+        if (!needsUpdate) {
+          console.log(`⏭️ Opportunity ${opportunityId} doesn't need AI summary update, skipping...`);
+          processedCount++;
+          continue;
+        }
+
+        console.log(`🤖 Generating AI summary for opportunity: ${opportunityId}`);
+        
+        // Generate AI summary
+        const aiSummary = await aiSummaryService.generateExecutiveSummary(opportunity);
+        
+        // Update the opportunity with the new AI summary
+        const updateData = {
+          aiSummary: aiSummary,
+          aiSummaryGeneratedAt: Timestamp.now(),
+          aiSummaryManuallyRequested: false, // Reset manual request flag
+          updatedAt: Timestamp.now()
+        };
+
+        await opportunitiesService.updateOpportunity(opportunityId, updateData, 'system');
+        
+        console.log(`✅ Successfully updated AI summary for opportunity: ${opportunityId}`);
+        successCount++;
+        
+      } catch (error) {
+        console.error(`❌ Error processing opportunity ${opportunityId}:`, error);
+        errorCount++;
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        errors.push(`Opportunity ${opportunityId}: ${errorMessage}`);
+      }
+      
+      processedCount++;
+      
+      // Add a small delay between processing to avoid overwhelming the AI API
+      if (processedCount < totalOpportunities) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+      }
+    }
+
+    const executionTime = Date.now() - startTime;
+    
+    console.log('🏁 Nightly AI Summary Generation Completed');
+    console.log(`📊 Processing Summary:`);
+    console.log(`   Total Opportunities: ${totalOpportunities}`);
+    console.log(`   Processed: ${processedCount}`);
+    console.log(`   Successful: ${successCount}`);
+    console.log(`   Errors: ${errorCount}`);
+    console.log(`   Execution Time: ${executionTime}ms`);
+    
+    if (errors.length > 0) {
+      console.log('❌ Errors encountered:');
+      errors.forEach((error, index) => {
+        console.log(`   ${index + 1}. ${error}`);
+      });
+    }
+
+  } catch (error) {
+    const executionTime = Date.now() - startTime;
+    console.error('❌ Fatal error in nightly AI summary generation:', error);
+    console.error(`💀 Total execution time before failure: ${executionTime}ms`);
   }
 }); 

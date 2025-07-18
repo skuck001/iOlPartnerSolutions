@@ -93,7 +93,6 @@ export const batchLoadDashboardData = onCall(
 
       if (validatedData.includeContacts) {
         dataPromises.push(contactsService.getContacts({ 
-          filters: { ownerId: user.uid },
           limit: validatedData.limit 
         }));
         dataKeys.push('contacts');
@@ -101,7 +100,6 @@ export const batchLoadDashboardData = onCall(
 
       if (validatedData.includeOpportunities) {
         dataPromises.push(opportunitiesService.getOpportunities({ 
-          filters: { ownerId: user.uid },
           limit: validatedData.limit 
         }));
         dataKeys.push('opportunities');
@@ -109,7 +107,6 @@ export const batchLoadDashboardData = onCall(
 
       if (validatedData.includeProducts) {
         dataPromises.push(productsService.getProducts({ 
-          filters: { ownerId: user.uid },
           limit: validatedData.limit 
         }));
         dataKeys.push('products');
@@ -117,7 +114,6 @@ export const batchLoadDashboardData = onCall(
 
       if (validatedData.includeTasks) {
         dataPromises.push(tasksService.getTasks({ 
-          filters: { assignedTo: user.uid },
           limit: validatedData.limit 
         }));
         dataKeys.push('tasks');
@@ -264,7 +260,6 @@ export const getRecentItems = onCall(
       try {
         // Get recent contacts
         const contactsResponse = await contactsService.getContacts({ 
-          filters: { ownerId: user.uid },
           limit 
         });
         const contactItems = contactsResponse.contacts.map((item: any) => ({
@@ -283,7 +278,6 @@ export const getRecentItems = onCall(
       try {
         // Get recent opportunities
         const opportunitiesResponse = await opportunitiesService.getOpportunities({ 
-          filters: { ownerId: user.uid },
           limit 
         });
         const opportunityItems = opportunitiesResponse.opportunities.map((item: any) => ({
@@ -302,7 +296,6 @@ export const getRecentItems = onCall(
       try {
         // Get recent products
         const productsResponse = await productsService.getProducts({ 
-          filters: { ownerId: user.uid },
           limit 
         });
         const productItems = productsResponse.products.map((item: any) => ({

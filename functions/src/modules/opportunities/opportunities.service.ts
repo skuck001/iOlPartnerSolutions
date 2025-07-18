@@ -116,8 +116,8 @@ export class OpportunitiesService {
       const searchLower = filters.search.toLowerCase();
       filteredOpportunities = filteredOpportunities.filter(opp =>
         opp.title?.toLowerCase().includes(searchLower) ||
-        opp.description?.toLowerCase().includes(searchLower) ||
-        opp.notes?.some((note: any) => note.content?.toLowerCase().includes(searchLower))
+        opp.summary?.toLowerCase().includes(searchLower) ||
+        opp.notes?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -192,11 +192,11 @@ export class OpportunitiesService {
       updatedAt: now,
       stage: opportunityData.stage || 'Lead',
       priority: opportunityData.priority || 'Medium',
-      probability: opportunityData.probability || this.getDefaultProbability(opportunityData.stage || 'Lead'),
+      // probability field removed
       contactIds: opportunityData.contactIds || [],
-      notes: opportunityData.notes || [],
+      notes: opportunityData.notes || '',
       activities: opportunityData.activities || [],
-      documents: opportunityData.documents || [],
+      // documents field removed
       tags: opportunityData.tags || []
     };
 
@@ -233,7 +233,7 @@ export class OpportunitiesService {
     // Update probability based on stage if stage is being updated
     const updateData = { ...updates };
     if (updates.stage && updates.stage !== existingOpportunity.stage) {
-      updateData.probability = updates.probability || this.getDefaultProbability(updates.stage);
+      // probability field removed
     }
 
     updateData.updatedAt = Timestamp.now();
@@ -394,7 +394,7 @@ export class OpportunitiesService {
 
       // Update probability based on stage if stage is being updated
       if (update.data.stage && update.data.stage !== existingOpportunity.stage) {
-        updateData.probability = update.data.probability || this.getDefaultProbability(update.data.stage);
+        // probability field removed
       }
 
       batch.update(opportunityRef, updateData);
@@ -420,17 +420,18 @@ export class OpportunitiesService {
     return updatedOpportunities;
   }
 
-  private getDefaultProbability(stage: OpportunityStage): number {
-    const probabilities: Record<OpportunityStage, number> = {
-      'Lead': 10,
-      'Qualified': 25,
-      'Proposal': 50,
-      'Negotiation': 75,
-      'Closed-Won': 100,
-      'Closed-Lost': 0
-    };
-    return probabilities[stage] || 25;
-  }
+  // Commented out since probability field was removed
+  // private getDefaultProbability(stage: OpportunityStage): number {
+  //   const probabilities: Record<OpportunityStage, number> = {
+  //     'Lead': 10,
+  //     'Qualified': 25,
+  //     'Proposal': 50,
+  //     'Negotiation': 75,
+  //     'Closed-Won': 100,
+  //     'Closed-Lost': 0
+  //   };
+  //   return probabilities[stage] || 25;
+  // }
 
   private buildFilterQuery(filters: OpportunityFilters): Query {
     let query: Query = this.db.collection('opportunities');

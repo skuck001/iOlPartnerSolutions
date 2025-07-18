@@ -113,9 +113,7 @@ export class ProductsService {
       const searchLower = filters.search.toLowerCase();
       filteredProducts = products.filter(product =>
         product.name?.toLowerCase().includes(searchLower) ||
-        product.description?.toLowerCase().includes(searchLower) ||
-        product.businessType?.toLowerCase().includes(searchLower) ||
-        product.features?.some((feature: string) => feature.toLowerCase().includes(searchLower))
+        product.description?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -175,8 +173,8 @@ export class ProductsService {
       createdAt: now,
       updatedAt: now,
       status: productData.status || 'Development',
-      features: productData.features || [],
-      integrations: productData.integrations || [],
+      // features field removed
+      // integrations field removed
       tags: productData.tags || []
     };
 
@@ -298,14 +296,17 @@ export class ProductsService {
 
     const stats: ProductStats = {
       total: products.length,
-      byCategory: {
-        'GDS': 0,
-        'PMS': 0,
-        'CRS': 0,
-        'API': 0,
-        'Middleware': 0,
-        'Other': 0
-      },
+              byCategory: {
+          'Business Intelligence': 0,
+          'Revenue Management': 0,
+          'Distribution': 0,
+          'Guest Experience': 0,
+          'Operations': 0,
+          'Connectivity': 0,
+          'Booking Engine': 0,
+          'Channel Management': 0,
+          'Other': 0
+        },
       byStatus: {},
       byBusinessType: {},
       activeConnections: 0,
@@ -327,12 +328,10 @@ export class ProductsService {
       }
 
       // Count by business type
-      if (product.businessType) {
-        stats.byBusinessType[product.businessType] = (stats.byBusinessType[product.businessType] || 0) + 1;
-      }
+      // businessType field removed
 
       // Count active connections (products with live status)
-      if (product.status === 'Live' || product.status === 'Production') {
+      if (product.status === 'Active') {
         stats.activeConnections++;
       }
 

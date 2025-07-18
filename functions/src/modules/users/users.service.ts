@@ -123,15 +123,37 @@ export class UsersService {
   }
 
   async getUser(userId: string): Promise<User | null> {
+    console.log(`UsersService.getUser called with userId: ${userId}`);
     const doc = await this.db.collection('users').doc(userId).get();
+    console.log(`Firestore doc exists: ${doc.exists} for userId: ${userId}`);
     
     if (!doc.exists) {
+      console.log(`Document not found in Firestore for userId: ${userId}`);
       return null;
     }
 
-    return {
+    const userData = {
       id: doc.id,
       ...doc.data()
+    } as User;
+    console.log(`Successfully retrieved user data for: ${userData.email} (${userId})`);
+    return userData;
+  }
+
+  async createUser(userId: string, userData: Omit<User, 'id'>): Promise<User> {
+    const userRef = this.db.collection('users').doc(userId);
+    
+    const newUserData = {
+      ...userData,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    };
+
+    await userRef.set(newUserData);
+
+    return {
+      id: userId,
+      ...newUserData
     } as User;
   }
 

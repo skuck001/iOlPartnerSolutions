@@ -202,7 +202,8 @@ export const Tasks: React.FC = () => {
   // Unified activity management
   const activityManager = useActivityManager({ 
     opportunities, 
-    onDataRefresh: fetchData 
+    onDataRefresh: fetchData,
+    updateOpportunity
   });
 
   useEffect(() => {

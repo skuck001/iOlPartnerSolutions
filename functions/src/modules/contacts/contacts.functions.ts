@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { validateData } from '../../shared/validation.middleware';
+import { validateData, ValidationError } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { ContactsService, ContactFilters, ContactsQueryOptions } from './contacts.service';
@@ -13,7 +13,7 @@ const contactsService = new ContactsService(db);
 const ContactFiltersSchema = z.object({
   ownerId: z.string().optional(),
   accountId: z.string().optional(),
-  contactType: z.enum(['Primary Contact', 'Technical Contact', 'Decision Maker', 'Influencer', 'Champion', 'Other']).optional(),
+  contactType: z.enum(['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other']).optional(),
   search: z.string().optional(),
   region: z.string().optional(),
   position: z.string().optional()
@@ -31,30 +31,32 @@ const CreateContactSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   accountId: z.string().min(1),
-  contactType: z.enum(['Primary Contact', 'Technical Contact', 'Decision Maker', 'Influencer', 'Champion', 'Other']).optional(),
-  position: z.string().optional(),
-  phone: z.string().optional(),
-  region: z.string().optional(),
-  company: z.string().optional(),
-  department: z.string().optional(),
-  notes: z.string().optional(),
+  contactType: z.enum(['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other']).nullish().transform(val => val ?? undefined),
+  position: z.string().nullish().transform(val => val ?? undefined),
+  phone: z.string().nullish().transform(val => val ?? undefined),
+  department: z.string().nullish().transform(val => val ?? undefined),
+  linkedIn: z.string().nullish().transform(val => val ?? undefined),
+  timezone: z.string().nullish().transform(val => val ?? undefined),
+  preferredContactMethod: z.enum(['Email', 'Phone', 'LinkedIn', 'Teams']).nullish().transform(val => val ?? undefined),
+  isDecisionMaker: z.boolean().optional(),
   lastContactDate: z.any().optional(), // Timestamp
-  tags: z.array(z.string()).optional(),
+  notes: z.string().nullish().transform(val => val ?? undefined),
   productIds: z.array(z.string()).optional()
 });
 
 const UpdateContactSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
-  contactType: z.enum(['Primary Contact', 'Technical Contact', 'Decision Maker', 'Influencer', 'Champion', 'Other']).optional(),
+  contactType: z.enum(['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other']).optional(),
   position: z.string().nullish().transform(val => val ?? undefined),
   phone: z.string().nullish().transform(val => val ?? undefined),
-  region: z.string().nullish().transform(val => val ?? undefined),
-  company: z.string().nullish().transform(val => val ?? undefined),
   department: z.string().nullish().transform(val => val ?? undefined),
-  notes: z.string().nullish().transform(val => val ?? undefined),
+  linkedIn: z.string().nullish().transform(val => val ?? undefined),
+  timezone: z.string().nullish().transform(val => val ?? undefined),
+  preferredContactMethod: z.enum(['Email', 'Phone', 'LinkedIn', 'Teams']).nullish().transform(val => val ?? undefined),
+  isDecisionMaker: z.boolean().optional(),
   lastContactDate: z.any().optional(), // Timestamp
-  tags: z.array(z.string()).optional(),
+  notes: z.string().nullish().transform(val => val ?? undefined),
   productIds: z.array(z.string()).optional(),
   ownerId: z.string().optional()
 });
@@ -81,8 +83,8 @@ export const getContacts = onCall(
       const options: ContactsQueryOptions = {
         ...validatedData,
         filters: {
-          ...validatedData.filters,
-          ownerId: user.uid // Always filter by current user
+          ...validatedData.filters
+          // Removed ownerId filter - allow access to all contacts
         }
       };
 
@@ -123,10 +125,7 @@ export const getContact = onCall(
         throw new HttpsError('not-found', 'Contact not found');
       }
 
-      // Check ownership
-      if (contact.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow access to all contacts
 
       return {
         success: true,
@@ -164,6 +163,10 @@ export const createContact = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+      }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
       }
@@ -188,14 +191,12 @@ export const updateContact = onCall(
 
       const validatedData = validateData(UpdateContactSchema, request.data.updates);
 
-      // Check if contact exists and user owns it
+      // Check if contact exists - removed ownership check
       const existingContact = await contactsService.getContact(request.data.contactId);
       if (!existingContact) {
         throw new HttpsError('not-found', 'Contact not found');
       }
-      if (existingContact.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow updates to all contacts
 
       const updatedContact = await contactsService.updateContact(
         request.data.contactId,
@@ -211,6 +212,10 @@ export const updateContact = onCall(
       console.error('Error in updateContact:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
@@ -234,14 +239,12 @@ export const deleteContact = onCall(
         throw new HttpsError('invalid-argument', 'Contact ID is required');
       }
 
-      // Check if contact exists and user owns it
+      // Check if contact exists - removed ownership check
       const existingContact = await contactsService.getContact(request.data.contactId);
       if (!existingContact) {
         throw new HttpsError('not-found', 'Contact not found');
       }
-      if (existingContact.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow deletion of all contacts
 
       await contactsService.deleteContact(request.data.contactId, user.uid);
 
@@ -253,6 +256,10 @@ export const deleteContact = onCall(
       console.error('Error in deleteContact:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
@@ -274,8 +281,8 @@ export const getContactsStats = onCall(
       const validatedData = validateData(ContactFiltersSchema, request.data || {});
 
       const filters: ContactFilters = {
-        ...validatedData,
-        ownerId: user.uid // Always filter by current user
+        ...validatedData
+        // Removed ownerId filter - allow stats for all contacts
       };
 
       const stats = await contactsService.getContactsStats(filters);
@@ -306,13 +313,14 @@ export const bulkUpdateContacts = onCall(
       
       const validatedData = validateData(BulkUpdateContactsSchema, request.data);
 
-      // Verify ownership of all contacts
+      // Verify all contacts exist - removed ownership verification
       for (const update of validatedData.updates) {
         const contact = await contactsService.getContact(update.id);
-        if (!contact || contact.ownerId !== user.uid) {
-          throw new HttpsError('permission-denied', `Access denied for contact ${update.id}`);
+        if (!contact) {
+          throw new HttpsError('not-found', `Contact not found: ${update.id}`);
         }
       }
+      // Removed ownership checks - allow bulk updates to all contacts
 
       const updatedContacts = await contactsService.bulkUpdateContacts(
         validatedData.updates,
@@ -327,6 +335,10 @@ export const bulkUpdateContacts = onCall(
       console.error('Error in bulkUpdateContacts:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);

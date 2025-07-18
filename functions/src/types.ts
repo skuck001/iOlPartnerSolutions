@@ -1,30 +1,31 @@
 import { Timestamp } from 'firebase-admin/firestore';
 
 // Re-export types needed for Cloud Functions
-export type ContactType = 'Primary Contact' | 'Technical Contact' | 'Decision Maker' | 'Influencer' | 'Champion' | 'Other';
+export type ContactType = 'Primary' | 'Secondary' | 'Technical' | 'Billing' | 'Decision Maker' | 'Other';
 
 export interface Contact {
   id?: string;
   name: string;
   email: string;
-  position?: string;
   phone?: string;
-  accountId: string;
-  contactType?: ContactType;
-  region?: string;
-  company?: string;
+  position?: string;
   department?: string;
-  notes?: string;
-  lastContactDate?: Timestamp | null;
-  tags?: string[];
+  contactType?: ContactType;
+  accountId: string;
   productIds?: string[];
+  linkedIn?: string;
+  timezone?: string;
+  preferredContactMethod?: 'Email' | 'Phone' | 'LinkedIn' | 'Teams';
+  isDecisionMaker?: boolean;
+  lastContactDate?: Timestamp | null;
+  notes?: string;
   ownerId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
-export type ProductCategory = 'GDS' | 'PMS' | 'CRS' | 'API' | 'Middleware' | 'Other';
-export type ProductSubcategory = 'Booking Engine' | 'Payment Gateway' | 'Property Management' | 'Channel Manager' | 'Rate Management' | 'Analytics' | 'Integration Platform' | 'API Gateway' | 'Other';
+export type ProductCategory = 'Business Intelligence' | 'Revenue Management' | 'Distribution' | 'Guest Experience' | 'Operations' | 'Connectivity' | 'Booking Engine' | 'Channel Management' | 'Other';
+export type ProductSubcategory = 'Rate Shopping Tools' | 'Competitive Intelligence' | 'Market Analytics' | 'Demand Forecasting' | 'Pricing Optimization' | 'Reservation Systems' | 'Property Management' | 'Guest Communication' | 'Loyalty Programs' | 'API Integration' | 'Data Connectivity' | 'Other';
 
 export interface Product {
   id?: string;
@@ -33,22 +34,21 @@ export interface Product {
   category: ProductCategory;
   subcategory?: ProductSubcategory;
   description?: string;
-  businessType?: string;
-  status?: string;
   version?: string;
-  features?: string[];
-  integrations?: string[];
-  documentation?: string;
-  support?: string;
-  pricing?: string;
+  status?: 'Active' | 'Deprecated' | 'Development' | 'Beta';
+  website?: string;
+  contactIds?: string[];
   tags?: string[];
+  targetMarket?: string;
+  pricing?: string;
+  notes?: string;
   ownerId: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
 
 export type OpportunityStage = 'Lead' | 'Qualified' | 'Proposal' | 'Negotiation' | 'Closed-Won' | 'Closed-Lost';
-export type OpportunityPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+export type OpportunityPriority = 'Critical' | 'High' | 'Medium' | 'Low';
 
 export interface Note {
   id: string;
@@ -75,23 +75,51 @@ export interface Document {
   uploadedBy: string;
 }
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: Timestamp;
+  completedAt?: Timestamp;
+}
+
+export type TaskStatus = 'To do' | 'In progress' | 'Done';
+
+export interface Task {
+  id?: string;
+  title: string;
+  opportunityId?: string;
+  assignedTo: string;
+  ownerId: string;
+  dueDate: Timestamp;
+  status: TaskStatus;
+  bucket?: string;
+  description?: string;
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
+}
+
 export interface Opportunity {
   id?: string;
   title: string;
-  description?: string;
+  summary?: string;
   accountId: string;
-  contactIds: string[];
   productId?: string;
+  contactIds: string[];
   stage: OpportunityStage;
   priority?: OpportunityPriority;
+  useCase?: string;
+  iolProducts?: string[];
+  notes?: string;
+  commercialModel?: string;
+  potentialVolume?: number;
   estimatedDealValue?: number;
-  probability?: number;
   expectedCloseDate?: Timestamp;
   lastActivityDate?: Timestamp;
-  notes?: Note[];
   activities?: Activity[];
-  documents?: Document[];
   tags?: string[];
+  checklist?: ChecklistItem[];
+  blockers?: ChecklistItem[];
   // AI Summary fields
   aiSummary?: string;
   aiSummaryGeneratedAt?: Timestamp;

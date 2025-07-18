@@ -212,8 +212,8 @@ ${opportunityContext}`;
     }
 
     // Include description or summary
-    if (opportunity.description) {
-      context += `Description: ${opportunity.description}\n`;
+    if (opportunity.summary) {
+      context += `Summary: ${opportunity.summary}\n`;
     } else if ((opportunity as any).summary) {
       context += `Description: ${(opportunity as any).summary}\n`;
     }

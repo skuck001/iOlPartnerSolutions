@@ -71,6 +71,7 @@ export interface Opportunity {
   tasks: string[];
   tags: string[];
   checklist?: ChecklistItem[]; // Optional for backward compatibility
+  blockers?: ChecklistItem[]; // Blockers checklist - same structure as regular checklist
   
   // Timeline fields
   expectedCloseDate?: Timestamp;

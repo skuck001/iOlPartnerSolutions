@@ -64,6 +64,7 @@ export {
 // Export AI summary functions
 export {
   generateOpportunitySummaryManualV2,
+  generateAISummariesNightly,
   testFirebaseConnection
 } from './modules/opportunities/ai-summary.functions';
 
@@ -92,7 +93,8 @@ export {
   getUsers,
   getUser,
   updateUser,
-  getUsersStats
+  getUsersStats,
+  testGetUser
 } from './modules/users/users.functions';
 
 // Export dashboard batch functions

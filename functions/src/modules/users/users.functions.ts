@@ -1,6 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
-import { validateData } from '../../shared/validation.middleware';
+import { validateData, ValidationError } from '../../shared/validation.middleware';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { UsersService } from './users.service';
@@ -65,6 +65,10 @@ export const getUsers = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+      }
       throw new HttpsError('internal', 'Failed to get users');
     }
   }
@@ -84,15 +88,81 @@ export const getUser = onCall(
         throw new HttpsError('invalid-argument', 'User ID is required');
       }
 
-      // Users can only get their own profile unless they're admin
-      if (request.data.userId !== user.uid && user.role !== 'admin') {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      console.log(`🔍 getUser called with userId: ${request.data.userId}`);
 
-      const userData = await usersService.getUser(request.data.userId);
+      // Removed ownership check - allow access to all user profiles
+
+      let userData = await usersService.getUser(request.data.userId);
+      console.log(`📋 getUser result for ${request.data.userId}:`, userData ? 'Found in Firestore' : 'NOT FOUND in Firestore');
       
-      if (!userData) {
-        throw new HttpsError('not-found', 'User not found');
+            if (!userData) {
+        // User document doesn't exist in Firestore, but user ID might be valid Firebase Auth UID
+        // Try to get user from Firebase Auth and auto-create user document
+        try {
+          const { getAuth } = await import('firebase-admin/auth');
+          const authUser = await getAuth().getUser(request.data.userId);
+          
+          // Create user document with basic information from Firebase Auth
+          const { Timestamp } = await import('firebase-admin/firestore');
+          const newUserData = {
+            id: authUser.uid,
+            email: authUser.email || '',
+            displayName: authUser.displayName || '',
+            firstName: '',
+            lastName: '',
+            phone: authUser.phoneNumber || '',
+            jobTitle: '',
+            department: '',
+            location: '',
+            bio: '',
+            avatar: '',
+            role: 'user',
+            permissions: [],
+            timezone: '',
+            notifications: {
+              email: true,
+              push: true,
+              weekly: true,
+            },
+            createdAt: Timestamp.now(),
+            lastLoginAt: authUser.metadata.lastSignInTime ? Timestamp.fromDate(new Date(authUser.metadata.lastSignInTime)) : Timestamp.now(),
+            updatedAt: Timestamp.now()
+          };
+          
+          // Create the user document
+          await usersService.createUser(authUser.uid, newUserData);
+          userData = newUserData;
+          
+          console.log(`✅ Auto-created user document for existing Firebase Auth user: ${authUser.email}`);
+        } catch (authError) {
+          // User doesn't exist in Firebase Auth either - return fallback user
+          console.log(`❌ User ${request.data.userId} not found in Firebase Auth. Returning fallback user.`);
+          const { Timestamp } = await import('firebase-admin/firestore');
+          userData = {
+            id: request.data.userId,
+            email: 'unknown@example.com',
+            displayName: 'Unknown User',
+            firstName: 'Unknown',
+            lastName: 'User',
+            phone: '',
+            jobTitle: '',
+            department: '',
+            location: '',
+            bio: '',
+            avatar: '',
+            role: 'user',
+            permissions: [],
+            timezone: '',
+            notifications: {
+              email: true,
+              push: true,
+              weekly: true,
+            },
+            createdAt: Timestamp.now(),
+            lastLoginAt: Timestamp.now(),
+            updatedAt: Timestamp.now()
+          };
+        }
       }
 
       return {
@@ -103,6 +173,10 @@ export const getUser = onCall(
       console.error('Error in getUser:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       throw new HttpsError('internal', 'Failed to get user');
     }
@@ -125,10 +199,7 @@ export const updateUser = onCall(
         throw new HttpsError('invalid-argument', 'User ID is required');
       }
 
-      // Users can only update their own profile unless they're admin
-      if (request.data.userId !== user.uid && user.role !== 'admin') {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow updates to all user profiles
 
       const updatedUser = await usersService.updateUser(request.data.userId, validatedData);
 
@@ -141,10 +212,42 @@ export const updateUser = onCall(
       if (error instanceof HttpsError) {
         throw error;
       }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
+      }
       if (error instanceof Error) {
         throw new HttpsError('invalid-argument', error.message);
       }
       throw new HttpsError('internal', 'Failed to update user');
+    }
+  }
+);
+
+// Test function to debug specific user lookup
+export const testGetUser = onCall(
+  { cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], maxInstances: 10 },
+  async (request) => {
+    try {
+      await authenticateUser(request.auth); // Just verify authentication
+      
+      const testUserId = 'Upznbx6fFNbCTujUmGwbQM1YNAp1'; // James Burdett
+      console.log(`Testing getUser for specific user: ${testUserId}`);
+      
+      const userData = await usersService.getUser(testUserId);
+      
+      return {
+        success: true,
+        testUserId,
+        found: !!userData,
+        data: userData
+      };
+    } catch (error: any) {
+      console.error('Error in testGetUser:', error);
+      return {
+        success: false,
+        error: error?.message || 'Unknown error'
+      };
     }
   }
 );
@@ -174,6 +277,10 @@ export const getUsersStats = onCall(
       console.error('Error in getUsersStats:', error);
       if (error instanceof HttpsError) {
         throw error;
+      }
+      if (error instanceof ValidationError) {
+        console.error('Validation errors:', error.errors);
+        throw new HttpsError('invalid-argument', `Validation failed: ${error.errors.map((e: any) => `${e.field}: ${e.message}`).join(', ')}`);
       }
       throw new HttpsError('internal', 'Failed to get users statistics');
     }

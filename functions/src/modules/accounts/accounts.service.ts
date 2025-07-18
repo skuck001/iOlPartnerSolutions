@@ -1,19 +1,21 @@
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { AuditService } from '../../shared/audit.service';
-import { NotFoundError, ConflictError, validateResourceExists, retryOperation } from '../../shared/errors';
+import { ConflictError, validateResourceExists, retryOperation } from '../../shared/errors';
 
 const db = getFirestore();
 
 export interface Account {
   id: string;
   name: string;
-  description?: string;
+  region: string; // Headoffice Country
   website?: string;
-  region: string;
-  industry?: string;
-  size?: 'Small' | 'Medium' | 'Large' | 'Enterprise';
-  status: 'Active' | 'Inactive' | 'Prospect';
-  tags?: string[];
+  parentAccountId?: string;
+  headquarters?: string;
+  description?: string;
+  logo?: string;
+  primaryContact?: string;
+  tags: string[];
+  notes?: string;
   ownerId: string;
   createdBy: string;
   updatedBy: string;
@@ -45,8 +47,8 @@ export class AccountsService {
   static async getAccounts(params: AccountQueryParams): Promise<AccountsResponse> {
     try {
       let query = db.collection('accounts')
-        .where('ownerId', '==', params.userId)
         .orderBy('updatedAt', 'desc');
+      // Removed ownerId filter - allow access to all accounts
 
       // Apply filters
       if (params.region) {
@@ -126,10 +128,7 @@ export class AccountsService {
     const doc = await db.collection('accounts').doc(accountId).get();
     const account = { id: doc.id, ...doc.data() } as Account;
 
-    // Check ownership
-    if (account.ownerId !== userId) {
-      throw new NotFoundError('Account', accountId);
-    }
+    // Removed ownership check - allow access to all accounts
 
     // Log the view action
     await AuditService.logAccountAction('VIEW', userId, accountId, { name: account.name });
@@ -196,20 +195,18 @@ export class AccountsService {
     try {
       await validateResourceExists('accounts', accountId, 'Account');
 
-      // Get current account to check ownership
+      // Get current account - removed ownership check
       const currentDoc = await db.collection('accounts').doc(accountId).get();
       const currentAccount = currentDoc.data() as Account;
 
-      if (currentAccount.ownerId !== userId) {
-        throw new NotFoundError('Account', accountId);
-      }
+      // Removed ownership check - allow updates to all accounts
 
       // Check for name conflicts if name is being updated
       if (data.name && data.name !== currentAccount.name) {
         const existingQuery = await db.collection('accounts')
-          .where('ownerId', '==', userId)
           .where('name', '==', data.name)
           .get();
+        // Removed ownerId filter from conflict check - check all accounts
 
         const conflictingDocs = existingQuery.docs.filter(doc => doc.id !== accountId);
         if (conflictingDocs.length > 0) {
@@ -257,13 +254,11 @@ export class AccountsService {
     try {
       await validateResourceExists('accounts', accountId, 'Account');
 
-      // Get current account to check ownership
+      // Get current account - removed ownership check
       const currentDoc = await db.collection('accounts').doc(accountId).get();
       const currentAccount = currentDoc.data() as Account;
 
-      if (currentAccount.ownerId !== userId) {
-        throw new NotFoundError('Account', accountId);
-      }
+      // Removed ownership check - allow deletion of all accounts
 
       // Check for related data that would prevent deletion
       const [contactsSnap, opportunitiesSnap] = await Promise.all([
@@ -308,8 +303,8 @@ export class AccountsService {
     recent: Account[];
   }> {
     try {
-      const accountsQuery = db.collection('accounts')
-        .where('ownerId', '==', userId);
+      const accountsQuery = db.collection('accounts');
+      // Removed ownerId filter - calculate stats for all accounts
 
       const snapshot = await accountsQuery.get();
       const accounts = snapshot.docs.map(doc => ({ 
@@ -319,7 +314,7 @@ export class AccountsService {
 
       // Calculate statistics
       const byStatus = accounts.reduce((acc, account) => {
-        acc[account.status] = (acc[account.status] || 0) + 1;
+        // Status field removed - keeping all accounts as active for stats
         return acc;
       }, {} as Record<string, number>);
 
@@ -358,7 +353,7 @@ export class AccountsService {
     let updated = 0;
 
     try {
-      // Validate all accounts exist and user owns them
+      // Validate all accounts exist - removed ownership validation
       const accountPromises = accountIds.map(id => 
         db.collection('accounts').doc(id).get()
       );
@@ -374,11 +369,7 @@ export class AccountsService {
           continue;
         }
 
-        const account = doc.data() as Account;
-        if (account.ownerId !== userId) {
-          errors.push(`Access denied for account ${accountId}`);
-          continue;
-        }
+        // Removed ownership check - allow bulk updates to all accounts
 
         batch.update(doc.ref, {
           ...updateData,

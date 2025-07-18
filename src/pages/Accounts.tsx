@@ -27,7 +27,7 @@ import {
 import * as XLSX from 'xlsx';
 import type { Account, Contact, Product, Opportunity } from '../types';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay } from 'date-fns';
-import { getUserDisplayName, getUserById } from '../lib/userUtils';
+import { useUsersApi } from '../hooks/useUsersApi';
 import { useDataContext } from '../context/DataContext';
 
 type SortField = 'name' | 'createdAt';
@@ -43,6 +43,8 @@ export const Accounts: React.FC = () => {
     getProducts,
     getOpportunities
   } = useDataContext();
+  
+  const { getUserById, getUserDisplayName } = useUsersApi();
   
   const accounts = cache?.accounts || [];
   const contacts = cache?.contacts || [];
@@ -61,15 +63,20 @@ export const Accounts: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Fetch owner names for all accounts
+    // Fetch owner names for all accounts using Cloud Functions API
     const fetchOwnerNames = async () => {
       const ownerIds = Array.from(new Set(accounts.map(account => account.ownerId).filter(Boolean)));
       const names: Record<string, string> = {};
       
       await Promise.all(
         ownerIds.map(async (ownerId) => {
-          const user = await getUserById(ownerId);
-          names[ownerId] = getUserDisplayName(user);
+          try {
+            const user = await getUserById(ownerId);
+            names[ownerId] = user ? getUserDisplayName(user) : 'Unknown User';
+          } catch (error) {
+            console.error(`Error fetching user ${ownerId}:`, error);
+            names[ownerId] = 'Unknown User';
+          }
         })
       );
       
@@ -79,7 +86,7 @@ export const Accounts: React.FC = () => {
     if (accounts && accounts.length > 0) {
       fetchOwnerNames();
     }
-  }, [accounts]);
+  }, [accounts, getUserById, getUserDisplayName]);
 
   // Update loading state when all data is loaded
   useEffect(() => {

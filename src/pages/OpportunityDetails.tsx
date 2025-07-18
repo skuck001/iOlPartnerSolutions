@@ -62,13 +62,14 @@ const OPPORTUNITY_STAGES: OpportunityStage[] = ['Lead', 'Qualified', 'Proposal',
 const OPPORTUNITY_PRIORITIES: OpportunityPriority[] = ['Critical', 'High', 'Medium', 'Low'];
 
 const IOL_PRODUCTS = [
-  'Rate Intelligence',
-  'Competitive Intelligence',
-  'Market Analytics',
-  'Demand Forecasting',
-  'Revenue Optimization',
-  'Distribution Analytics',
-  'Performance Benchmarking'
+  'iOL X Demand',
+  'iOL X Supply',
+  'iOL X Exchange',
+  'iOL Pulse',
+  'iOL Pay Issuing',
+  'iOL Pay Acquiring',
+  'iOL Pay Payment Gateway',
+  'iOL Pay Automate'
 ];
 
 const ACTIVITY_TYPES = ['Meeting', 'Email', 'Call', 'WhatsApp', 'Demo', 'Workshop'];
@@ -136,6 +137,7 @@ export const OpportunityDetails: React.FC = () => {
     tags: [] as string[],
     activities: [] as ActivityType[],
     checklist: [] as ChecklistItem[],
+    blockers: [] as ChecklistItem[],
     commercialModel: '',
     potentialVolume: 0,
     estimatedDealValue: 0,
@@ -150,6 +152,8 @@ export const OpportunityDetails: React.FC = () => {
   const [activitiesDisplayCount, setActivitiesDisplayCount] = useState(5); // For pagination
   const [newChecklistItem, setNewChecklistItem] = useState('');
   const [showCompletedChecklist, setShowCompletedChecklist] = useState(false);
+  const [newBlockerItem, setNewBlockerItem] = useState('');
+  const [showCompletedBlockers, setShowCompletedBlockers] = useState(false);
   const [showSuggestedContacts, setShowSuggestedContacts] = useState(false);
   const [activityForm, setActivityForm] = useState({
     activityType: 'Meeting' as 'Meeting' | 'Email' | 'Call' | 'WhatsApp' | 'Demo' | 'Workshop',
@@ -440,6 +444,7 @@ export const OpportunityDetails: React.FC = () => {
             tags: opportunityTyped.tags || [],
             activities: opportunityTyped.activities || [],
             checklist: opportunityTyped.checklist || [],
+            blockers: opportunityTyped.blockers || [],
             commercialModel: opportunityTyped.commercialModel || '',
             potentialVolume: opportunityTyped.potentialVolume || 0,
             estimatedDealValue: opportunityTyped.estimatedDealValue || 0,
@@ -468,8 +473,9 @@ export const OpportunityDetails: React.FC = () => {
     opportunities: opportunity ? [opportunity] : [], 
     onDataRefresh: async () => {
       await fetchOpportunityData();
-      await fetchRelatedData();
-    }
+      await refreshData('opportunities');
+    },
+    updateOpportunity
   });
 
   useEffect(() => {
@@ -646,7 +652,7 @@ export const OpportunityDetails: React.FC = () => {
     setFormData({
       ...formData,
       checklist: formData.checklist.map(item =>
-        item.id === itemId ? { ...item, completed: !item.completed } : item
+        item.id === itemId ? { ...item, completed: !item.completed, completedAt: !item.completed ? Timestamp.now() : undefined } : item
       )
     });
   };
@@ -655,6 +661,39 @@ export const OpportunityDetails: React.FC = () => {
     setFormData({
         ...formData,
       checklist: formData.checklist.filter(item => item.id !== itemId)
+    });
+  };
+
+  const handleAddBlockerItem = () => {
+    if (newBlockerItem.trim()) {
+      const newItem = {
+        id: Date.now().toString(),
+        title: newBlockerItem.trim(),
+        text: newBlockerItem.trim(),
+        completed: false,
+        createdAt: Timestamp.now(),
+      };
+      setFormData({
+        ...formData,
+        blockers: [...formData.blockers, newItem]
+      });
+      setNewBlockerItem('');
+    }
+  };
+
+  const handleToggleBlockerItem = (itemId: string) => {
+    setFormData({
+      ...formData,
+      blockers: formData.blockers.map(item =>
+        item.id === itemId ? { ...item, completed: !item.completed, completedAt: !item.completed ? Timestamp.now() : undefined } : item
+      )
+    });
+  };
+
+  const handleRemoveBlockerItem = (itemId: string) => {
+    setFormData({
+      ...formData,
+      blockers: formData.blockers.filter(item => item.id !== itemId)
     });
   };
 
@@ -771,6 +810,28 @@ export const OpportunityDetails: React.FC = () => {
                       />
                     </div>
                     
+                    <div className="md:col-span-2">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">iOL Products</label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 border border-gray-200 rounded-md p-2.5 bg-gray-50">
+                        {IOL_PRODUCTS.map((product) => (
+                          <label key={product} className="flex items-center text-xs">
+                            <input
+                              type="checkbox"
+                              checked={formData.iolProducts.includes(product)}
+                              onChange={() => handleIolProductToggle(product)}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 mr-1.5"
+                            />
+                            <span className="text-gray-700">
+                              {product}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select the iOL products you plan to offer for this opportunity
+                      </p>
+                    </div>
+                    
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Account</label>
                       <select
@@ -844,6 +905,19 @@ export const OpportunityDetails: React.FC = () => {
                         onChange={(ownerId) => setFormData({ ...formData, ownerId })}
                         label="Opportunity Owner"
                         required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Expected Close Date</label>
+                      <input
+                        type="date"
+                        value={formData.expectedCloseDate ? formData.expectedCloseDate.toISOString().split('T')[0] : ''}
+                        onChange={(e) => setFormData({ 
+                          ...formData, 
+                          expectedCloseDate: e.target.value ? new Date(e.target.value) : null 
+                        })}
+                        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       />
                     </div>
 
@@ -1881,6 +1955,137 @@ export const OpportunityDetails: React.FC = () => {
                       <CheckSquare className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                       <p className="text-sm text-gray-500">No checklist items yet</p>
                       <p className="text-xs text-gray-400">Add items to track progress</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Blockers */}
+                <div className="bg-white shadow rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <h2 className="text-base font-medium text-gray-900">
+                        Blockers ({formData.blockers.filter(item => !item.completed).length})
+                      </h2>
+                    </div>
+                    {formData.blockers.filter(item => item.completed).length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowCompletedBlockers(!showCompletedBlockers)}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        {showCompletedBlockers ? 'Hide' : 'Show'} resolved ({formData.blockers.filter(item => item.completed).length})
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Add new blocker item */}
+                  <div className="flex gap-1.5 mb-3">
+                    <input
+                      type="text"
+                      value={newBlockerItem}
+                      onChange={(e) => setNewBlockerItem(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddBlockerItem())}
+                      className="flex-1 text-sm border border-red-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      placeholder="Add blocker or issue..."
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddBlockerItem}
+                      className="px-2 py-1.5 text-red-500 hover:text-red-600 border border-red-300 rounded-md hover:bg-red-50"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Active blockers */}
+                  <div className="space-y-2">
+                    {formData.blockers
+                      .filter(item => !item.completed)
+                      .map((item) => (
+                        <div key={item.id} className="flex items-start gap-2 p-2 bg-red-50 rounded-lg border border-red-200">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleBlockerItem(item.id)}
+                            className="mt-0.5 w-4 h-4 border-2 border-red-400 rounded hover:border-red-500 focus:outline-none focus:border-red-500 transition-colors"
+                          >
+                            <span className="sr-only">Mark as resolved</span>
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-red-900 break-words font-medium">{item.text}</p>
+                            <p className="text-xs text-red-700 mt-1">
+                              Added {(() => {
+                              try {
+                                const date = safeDateConversion(item.createdAt);
+                                return format(date, 'MMM d, yyyy');
+                              } catch (error) {
+                                console.error('Date formatting error:', error, item.createdAt);
+                                return 'N/A';
+                              }
+                            })()}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBlockerItem(item.id)}
+                            className="text-red-400 hover:text-red-600 transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Resolved blockers (collapsible) */}
+                  {showCompletedBlockers && formData.blockers.filter(item => item.completed).length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-gray-200">
+                      <div className="space-y-2">
+                        {formData.blockers
+                          .filter(item => item.completed)
+                          .map((item) => (
+                            <div key={item.id} className="flex items-start gap-2 p-2 bg-green-50 rounded-lg border border-green-200 opacity-75">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleBlockerItem(item.id)}
+                                className="mt-0.5 w-4 h-4 bg-green-500 border-2 border-green-500 rounded text-white flex items-center justify-center hover:bg-green-600 focus:outline-none transition-colors"
+                              >
+                                <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-700 line-through break-words">{item.text}</p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  Resolved {item.completedAt ? (() => {
+                              try {
+                                const date = safeDateConversion(item.completedAt);
+                                return format(date, 'MMM d, yyyy');
+                              } catch (error) {
+                                console.error('Date formatting error:', error, item.completedAt);
+                                return 'N/A';
+                              }
+                            })() : 'recently'}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveBlockerItem(item.id)}
+                                className="text-gray-400 hover:text-red-500 transition-colors"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {formData.blockers.length === 0 && (
+                    <div className="text-center py-4">
+                      <AlertTriangle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No blockers identified</p>
+                      <p className="text-xs text-gray-400">Track issues that may prevent progress</p>
                     </div>
                   )}
                 </div>

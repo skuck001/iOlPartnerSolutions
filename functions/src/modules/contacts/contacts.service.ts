@@ -104,7 +104,7 @@ export class ContactsService {
         contact.name?.toLowerCase().includes(searchLower) ||
         contact.email?.toLowerCase().includes(searchLower) ||
         contact.position?.toLowerCase().includes(searchLower) ||
-        contact.company?.toLowerCase().includes(searchLower)
+        contact.department?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -163,7 +163,7 @@ export class ContactsService {
       createdAt: now,
       updatedAt: now,
       lastContactDate: contactData.lastContactDate || null,
-      tags: contactData.tags || [],
+      // tags field removed from Contact interface
       productIds: contactData.productIds || []
     };
 
@@ -277,12 +277,12 @@ export class ContactsService {
     const stats: ContactStats = {
       total: contacts.length,
       byType: {
-        'Primary Contact': 0,
-        'Technical Contact': 0,
-        'Decision Maker': 0,
-        'Influencer': 0,
-        'Champion': 0,
-        'Other': 0
+                  'Primary': 0,
+          'Secondary': 0,
+          'Technical': 0,
+          'Billing': 0,
+          'Decision Maker': 0,
+          'Other': 0
       },
       byRegion: {},
       activeThisMonth: 0,
@@ -302,9 +302,7 @@ export class ContactsService {
       }
 
       // Count by region
-      if (contact.region) {
-        stats.byRegion[contact.region] = (stats.byRegion[contact.region] || 0) + 1;
-      }
+      // Region field removed from Contact interface
 
       // Count active this month (had contact)
       if (contact.lastContactDate && contact.lastContactDate.toDate() > oneMonthAgo) {

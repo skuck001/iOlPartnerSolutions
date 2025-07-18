@@ -196,22 +196,22 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       try {
         const response = await callFunction(cloudFunctionName, params);
         
-        let data: T;
+        let data: any;
         if (response.data) {
           // Handle response with data wrapper
           if (Array.isArray(response.data)) {
-            data = response.data as T;
+            data = response.data;
           } else if (response.data.accounts || response.data.contacts || 
                      response.data.opportunities || response.data.products || 
                      response.data.tasks || response.data.users) {
             // Handle specific data property
-            data = response.data[dataType] || response.data as T;
+            data = response.data[dataType] || response.data;
           } else {
-            data = response.data as T;
+            data = response.data;
           }
         } else {
           // Handle direct response
-          data = response as T;
+          data = response;
         }
 
         // Process data based on type to extract arrays from response objects

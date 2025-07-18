@@ -36,19 +36,21 @@ const CreateOpportunitySchema = z.object({
   title: z.string().min(1),
   accountId: z.string().min(1),
   stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']),
-  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
-  summary: z.string().optional(),
-  description: z.string().optional(),
-  estimatedDealValue: z.number().optional(),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).nullish().transform(val => val ?? undefined),
+  summary: z.string().nullish().transform(val => val ?? undefined),
+  description: z.string().nullish().transform(val => val ?? undefined),
+  estimatedDealValue: z.number().nullish().transform(val => val ?? undefined),
   probability: z.number().min(0).max(100).optional(),
   expectedCloseDate: z.any().optional(), // Timestamp
   lastActivityDate: z.any().optional(), // Timestamp
-  productId: z.string().optional(),
+  productId: z.string().nullish().transform(val => val ?? undefined),
   contactIds: z.array(z.string()),
-  notes: z.array(z.any()).optional(),
+  notes: z.string().nullish().transform(val => val ?? undefined),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
-  tags: z.array(z.string()).optional()
+  tags: z.array(z.string()).optional(),
+  checklist: z.array(z.any()).optional(),
+  blockers: z.array(z.any()).optional()
 });
 
 const UpdateOpportunitySchema = z.object({
@@ -63,10 +65,12 @@ const UpdateOpportunitySchema = z.object({
   lastActivityDate: z.any().optional(), // Timestamp
   productId: z.string().nullish().transform(val => val ?? undefined),
   contactIds: z.array(z.string()).optional(),
-  notes: z.array(z.any()).optional(),
+  notes: z.string().nullish().transform(val => val ?? undefined),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
   tags: z.array(z.string()).optional(),
+  checklist: z.array(z.any()).optional(),
+  blockers: z.array(z.any()).optional(),
   ownerId: z.string().optional()
 });
 
@@ -91,8 +95,8 @@ export const getOpportunities = onCall(
       const options: OpportunitiesQueryOptions = {
         ...validatedData,
         filters: {
-          ...validatedData.filters,
-          ownerId: user.uid // Always filter by current user
+          ...validatedData.filters
+          // Removed ownerId filter - allow access to all opportunities
         }
       };
 
@@ -133,10 +137,7 @@ export const getOpportunity = onCall(
         throw new HttpsError('not-found', 'Opportunity not found');
       }
 
-      // Check ownership
-      if (opportunity.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow access to all opportunities
 
       return {
         success: true,
@@ -204,14 +205,12 @@ export const updateOpportunity = onCall(
 
       const validatedData = validateData(UpdateOpportunitySchema, request.data.updates);
 
-      // Check if opportunity exists and user owns it
+      // Check if opportunity exists - removed ownership check
       const existingOpportunity = await opportunitiesService.getOpportunity(request.data.opportunityId);
       if (!existingOpportunity) {
         throw new HttpsError('not-found', 'Opportunity not found');
       }
-      if (existingOpportunity.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow updates to all opportunities
 
       const updatedOpportunity = await opportunitiesService.updateOpportunity(
         request.data.opportunityId,
@@ -254,14 +253,12 @@ export const deleteOpportunity = onCall(
         throw new HttpsError('invalid-argument', 'Opportunity ID is required');
       }
 
-      // Check if opportunity exists and user owns it
+      // Check if opportunity exists - removed ownership check
       const existingOpportunity = await opportunitiesService.getOpportunity(request.data.opportunityId);
       if (!existingOpportunity) {
         throw new HttpsError('not-found', 'Opportunity not found');
       }
-      if (existingOpportunity.ownerId !== user.uid) {
-        throw new HttpsError('permission-denied', 'Access denied');
-      }
+      // Removed ownership check - allow deletion of all opportunities
 
       await opportunitiesService.deleteOpportunity(request.data.opportunityId, user.uid);
 
@@ -294,8 +291,8 @@ export const getOpportunitiesStats = onCall(
       const validatedData = validateData(OpportunityFiltersSchema, request.data || {});
 
       const filters: OpportunityFilters = {
-        ...validatedData,
-        ownerId: user.uid // Always filter by current user
+        ...validatedData
+        // Removed ownerId filter - allow stats for all opportunities
       };
 
       const stats = await opportunitiesService.getOpportunitiesStats(filters);
@@ -325,13 +322,14 @@ export const bulkUpdateOpportunities = onCall(
       await RateLimiter.checkLimit(user.uid, RateLimitPresets.heavy.maxRequests, RateLimitPresets.heavy.windowMs, 'bulkUpdateOpportunities');
       const validatedData = validateData(BulkUpdateOpportunitiesSchema, request.data);
 
-      // Verify ownership of all opportunities
+      // Verify all opportunities exist - removed ownership verification
       for (const update of validatedData.updates) {
         const opportunity = await opportunitiesService.getOpportunity(update.id);
-        if (!opportunity || opportunity.ownerId !== user.uid) {
-          throw new HttpsError('permission-denied', `Access denied for opportunity ${update.id}`);
+        if (!opportunity) {
+          throw new HttpsError('not-found', `Opportunity not found: ${update.id}`);
         }
       }
+      // Removed ownership checks - allow bulk updates to all opportunities
 
       const updatedOpportunities = await opportunitiesService.bulkUpdateOpportunities(
         validatedData.updates,

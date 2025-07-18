@@ -15,9 +15,9 @@ import {
   Clock,
   CheckCircle,
   Building2,
-  MapPin,
   Package,
-  Copy
+  Copy,
+  Sparkles
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, isWithinInterval, subWeeks, addWeeks, getISOWeek } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -81,6 +81,7 @@ interface WeeklySummary {
   activitiesThisWeek: number;
   activitiesNextWeek: number;
   overdueActivities: number;
+  totalBlockers: number;
 }
 
 interface OpportunityProgress {
@@ -160,10 +161,16 @@ export const WeeklyReport: React.FC = () => {
     const thisWeekActivities: typeof allActivities = [];
     const nextWeekActivities: typeof allActivities = [];
     let overdueCount = 0;
+    let totalBlockersCount = 0;
 
     opportunities.forEach(opp => {
       const account = accounts.find(a => a.id === opp.accountId);
       if (!account) return;
+
+      // Count unresolved blockers
+      if (opp.blockers && opp.blockers.length > 0) {
+        totalBlockersCount += opp.blockers.filter(blocker => !blocker.completed).length;
+      }
 
       (opp.activities || []).forEach(activity => {
         const activityDate = safeDateConversion(activity.dateTime);
@@ -214,7 +221,8 @@ export const WeeklyReport: React.FC = () => {
       activeOpportunities: activeOpps.length,
       activitiesThisWeek: thisWeekActivities.length,
       activitiesNextWeek: nextWeekActivities.length,
-      overdueActivities: overdueCount
+      overdueActivities: overdueCount,
+      totalBlockers: totalBlockersCount
     });
 
     // Analyze opportunity progress
@@ -235,10 +243,6 @@ export const WeeklyReport: React.FC = () => {
 
       // Detect weekly changes (simplified - would need proper change tracking)
       const weeklyChanges: string[] = [];
-      if (opp.updatedAt && isWithinInterval(safeDateConversion(opp.updatedAt), { start: weekStart, end: weekEnd })) {
-        weeklyChanges.push('Opportunity updated this week');
-      }
-
       const thisWeekActivityCount = activities.filter(a => 
         isWithinInterval(safeDateConversion(a.dateTime), { start: weekStart, end: weekEnd })
       ).length;
@@ -264,7 +268,13 @@ export const WeeklyReport: React.FC = () => {
         riskFactors.push(`${overdueActivities.length} overdue activities`);
       }
 
-              if (opp.expectedCloseDate && safeDateConversion(opp.expectedCloseDate) < addWeeks(new Date(), 2) && opp.stage === 'Lead') {
+      // Check for unresolved blockers
+      const unresolvedBlockers = opp.blockers ? opp.blockers.filter(blocker => !blocker.completed) : [];
+      if (unresolvedBlockers.length > 0) {
+        riskFactors.push(`${unresolvedBlockers.length} active blockers`);
+      }
+
+      if (opp.expectedCloseDate && safeDateConversion(opp.expectedCloseDate) < addWeeks(new Date(), 2) && opp.stage === 'Lead') {
         riskFactors.push('Close date approaching but still in Lead stage');
       }
 
@@ -343,6 +353,7 @@ export const WeeklyReport: React.FC = () => {
       ['Activities This Week', summary?.activitiesThisWeek || 0],
       ['Upcoming Activities', summary?.activitiesNextWeek || 0],
       ['Overdue Activities', summary?.overdueActivities || 0],
+      ['Active Blockers', summary?.totalBlockers || 0],
 
     ];
     
@@ -461,6 +472,9 @@ export const WeeklyReport: React.FC = () => {
     if ((summary?.overdueActivities || 0) > 0) {
       emailContent += `⚠️ Overdue Activities: ${summary?.overdueActivities}\n`;
     }
+    if ((summary?.totalBlockers || 0) > 0) {
+      emailContent += `🚫 Active Blockers: ${summary?.totalBlockers}\n`;
+    }
     emailContent += `\n`;
 
     emailContent += `KEY OPPORTUNITIES\n`;
@@ -483,6 +497,101 @@ export const WeeklyReport: React.FC = () => {
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
       alert('Failed to copy to clipboard. Please try again.');
+    }
+  };
+
+  const copyOpportunityCards = async () => {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
+
+    let emailContent = `OPPORTUNITY PROGRESS & STATUS\n`;
+    emailContent += `Week of ${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}\n`;
+    emailContent += `${'='.repeat(50)}\n\n`;
+
+    opportunityProgress.slice(0, 15).forEach((progress, index) => {
+      // Card Header
+      emailContent += `${index + 1}. ${progress.opportunity.title.toUpperCase()}\n`;
+      
+      // Priority badge
+      if (progress.opportunity.priority === 'Critical' || progress.opportunity.priority === 'High') {
+        emailContent += `   🔴 ${progress.opportunity.priority} Priority\n`;
+      }
+      
+      // Company and Contact Info
+      emailContent += `   🏢 ${progress.account?.name || 'Unknown Account'}`;
+      if (progress.opportunity.iolProducts && progress.opportunity.iolProducts.length > 0) {
+        emailContent += ` • ${progress.opportunity.iolProducts.slice(0, 2).join(', ')}`;
+        if (progress.opportunity.iolProducts.length > 2) {
+          emailContent += ` +${progress.opportunity.iolProducts.length - 2} more`;
+        }
+      }
+      emailContent += `\n`;
+      
+      // Contacts
+      const opportunityContacts = contacts.filter(c => progress.opportunity.contactIds.includes(c.id || ''));
+      if (opportunityContacts.length > 0) {
+        emailContent += `   👥 ${opportunityContacts.map(c => c.name).join(', ')}\n`;
+      }
+      
+      // Stage and Value
+      emailContent += `   📊 Stage: ${progress.opportunity.stage}\n`;
+      emailContent += `   💰 Value: $${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}`;
+      if (progress.opportunity.expectedCloseDate) {
+        emailContent += ` • Expected: ${format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM yyyy')}`;
+      }
+      emailContent += `\n\n`;
+
+      // AI Executive Summary
+      if (progress.opportunity.aiSummary) {
+        emailContent += `   ✨ EXECUTIVE SUMMARY:\n`;
+        emailContent += `   ${progress.opportunity.aiSummary}\n`;
+        if (progress.opportunity.aiSummaryGeneratedAt) {
+          emailContent += `   (Updated ${format(safeDateConversion(progress.opportunity.aiSummaryGeneratedAt), 'MMM d')})\n`;
+        }
+        emailContent += `\n`;
+      }
+
+      // Activities
+      if (progress.lastActivity) {
+        emailContent += `   ✅ LAST ACTIVITY (${format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d, yyyy')}):\n`;
+        emailContent += `      ${progress.lastActivity.subject}\n`;
+        if (progress.lastActivity.notes) {
+          emailContent += `      Notes: ${progress.lastActivity.notes}\n`;
+        }
+        emailContent += `\n`;
+      }
+
+      if (progress.nextActivity) {
+        emailContent += `   🕐 NEXT ACTIVITY (${format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d, yyyy')}):\n`;
+        emailContent += `      ${progress.nextActivity.subject}\n`;
+        if (progress.nextActivity.notes) {
+          emailContent += `      Notes: ${progress.nextActivity.notes}\n`;
+        }
+        emailContent += `\n`;
+      }
+
+      // Weekly Updates and Risks
+      if (progress.weeklyChanges.length > 0) {
+        emailContent += `   📈 THIS WEEK: ${progress.weeklyChanges.join(' • ')}\n`;
+      }
+
+      if (progress.riskFactors.length > 0) {
+        emailContent += `   ⚠️  ATTENTION REQUIRED: ${progress.riskFactors.join(' • ')}\n`;
+      }
+
+      if (!progress.lastActivity && !progress.nextActivity) {
+        emailContent += `   ⚠️  No recent or scheduled activities\n`;
+      }
+
+      emailContent += `\n${'-'.repeat(60)}\n\n`;
+    });
+
+    try {
+      await navigator.clipboard.writeText(emailContent);
+      alert('Opportunity cards copied to clipboard! You can now paste them into an email.');
+    } catch (err) {
+      console.error('Failed to copy opportunity cards to clipboard:', err);
+      alert('Failed to copy opportunity cards to clipboard. Please try again.');
     }
   };
 
@@ -525,6 +634,13 @@ export const WeeklyReport: React.FC = () => {
             >
               <Copy className="h-4 w-4" />
               Copy for Email
+            </button>
+            <button
+              onClick={copyOpportunityCards}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
+            >
+              <Copy className="h-4 w-4" />
+              Copy Cards
             </button>
             <button
               onClick={exportToExcel}
@@ -593,13 +709,23 @@ export const WeeklyReport: React.FC = () => {
             </div>
 
             {/* Risk Alert */}
-            {(summary?.overdueActivities || 0) > 0 && (
+            {((summary?.overdueActivities || 0) > 0 || (summary?.totalBlockers || 0) > 0) && (
               <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-red-500" />
-                  <p className="text-sm font-medium text-red-800">
-                    ⚠️ {summary?.overdueActivities} overdue activities require attention
-                  </p>
+                  <div className="text-sm font-medium text-red-800">
+                    <div className="flex items-center gap-4">
+                      {(summary?.overdueActivities || 0) > 0 && (
+                        <span>⚠️ {summary?.overdueActivities} overdue activities</span>
+                      )}
+                      {(summary?.totalBlockers || 0) > 0 && (
+                        <span>🚫 {summary?.totalBlockers} active blockers</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-red-600 mt-1">
+                      These issues require immediate attention
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -610,183 +736,178 @@ export const WeeklyReport: React.FC = () => {
           {/* Opportunity Progress */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Opportunity Progress & Status</h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {opportunityProgress.slice(0, 15).map((progress) => {
-                const priorityBorderColors = {
-                  'Critical': 'border-l-red-500',
-                  'High': 'border-l-orange-500', 
-                  'Medium': 'border-l-yellow-500',
-                  'Low': 'border-l-green-500'
-                };
-                const borderColor = priorityBorderColors[progress.opportunity.priority || 'Medium'];
-                
                 return (
-                <div key={progress.opportunity.id} className={`border border-gray-200 ${borderColor} border-l-4 rounded-lg p-4 hover:bg-gray-50 transition-colors`}>
-                  <div className="flex items-start justify-between mb-3">
+                <div key={progress.opportunity.id} className="bg-white border border-gray-100 rounded-lg p-6 hover:shadow-md transition-all duration-200">
+                  {/* Header Section */}
+                  <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <Link
                           to={`/opportunities/${progress.opportunity.id}`}
-                          className="text-lg font-medium text-gray-900 hover:text-primary-600"
+                          className="text-xl font-semibold text-gray-900 hover:text-red-600 transition-colors"
                         >
                           {progress.opportunity.title}
                         </Link>
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${getStageColor(progress.opportunity.stage)}`}>
-                          {progress.opportunity.stage}
-                        </span>
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(progress.opportunity.priority || 'Medium')}`}>
-                          {progress.opportunity.priority || 'Medium'}
-                        </span>
+                        {progress.opportunity.priority === 'Critical' && (
+                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded bg-red-600 text-white">
+                            Critical
+                          </span>
+                        )}
+                        {progress.opportunity.priority === 'High' && (
+                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-700">
+                            High Priority
+                          </span>
+                        )}
                       </div>
                       
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
+                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-4">
                         <div className="flex items-center gap-1">
-                          <Building2 className="h-3 w-3" />
-                          {progress.account?.name || 'Unknown Account'}
+                          <Building2 className="h-4 w-4" />
+                          <span className="font-medium">{progress.account?.name || 'Unknown Account'}</span>
+                          {progress.opportunity.iolProducts && progress.opportunity.iolProducts.length > 0 && (
+                            <span className="text-gray-500">
+                              • {progress.opportunity.iolProducts.slice(0, 2).join(', ')}
+                              {progress.opportunity.iolProducts.length > 2 && ` +${progress.opportunity.iolProducts.length - 2} more`}
+                            </span>
+                          )}
                         </div>
+                        {(() => {
+                          const opportunityContacts = contacts.filter(c => progress.opportunity.contactIds.includes(c.id || ''));
+                          return opportunityContacts.length > 0 && (
+                            <div className="flex items-center gap-1">
+                              <Users className="h-4 w-4" />
+                              <span className="text-gray-500">
+                                {opportunityContacts.map(c => c.name).join(', ')}
+                              </span>
+                            </div>
+                          );
+                        })()}
                         <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {progress.opportunity.region || 'No region'}
+                          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                            {progress.opportunity.stage}
+                          </span>
                         </div>
-                        {progress.opportunity.iolProducts && progress.opportunity.iolProducts.length > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Package className="h-3 w-3" />
-                            {progress.opportunity.iolProducts.slice(0, 2).join(', ')}
-                            {progress.opportunity.iolProducts.length > 2 && ` +${progress.opportunity.iolProducts.length - 2}`}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Weekly Status and Risk Factors in one line */}
-                      {(progress.weeklyChanges.length > 0 || progress.riskFactors.length > 0) && (
-                        <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-start justify-between gap-4">
-                            {/* This Week Updates */}
-                            {progress.weeklyChanges.length > 0 && (
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                  <span className="text-sm font-medium text-blue-700">This Week</span>
-                                </div>
-                                <div className="text-sm text-blue-600">
-                                  {progress.weeklyChanges.join(' • ')}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Risk Factors */}
-                            {progress.riskFactors.length > 0 && (
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <AlertTriangle className="w-3 h-3 text-red-500" />
-                                  <span className="text-sm font-medium text-red-700">Risks</span>
-                                </div>
-                                <div className="text-sm text-red-600">
-                                  {progress.riskFactors.join(' • ')}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Activity Status with Notes */}
-                      <div className="space-y-2">
-                        {progress.lastActivity && (
-                          <div className="flex items-start gap-2 p-2 bg-green-50 rounded-lg">
-                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-medium text-green-700">Last Activity</span>
-                                <span className="text-xs text-green-600">
-                                  {format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d')}
-                                </span>
-                              </div>
-                              <p className="text-sm text-green-800 font-medium">{progress.lastActivity.subject}</p>
-                              {progress.lastActivity.notes && (
-                                <p className="text-sm text-green-600 mt-1 line-clamp-2">{progress.lastActivity.notes}</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {progress.nextActivity && (
-                          <div className="flex items-start gap-2 p-2 bg-blue-50 rounded-lg">
-                            <Clock className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="text-sm font-medium text-blue-700">Next Activity</span>
-                                <span className="text-xs text-blue-600">
-                                  {format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d')}
-                                </span>
-                              </div>
-                              <p className="text-sm text-blue-800 font-medium">{progress.nextActivity.subject}</p>
-                              {progress.nextActivity.notes && (
-                                <p className="text-sm text-blue-600 mt-1 line-clamp-2">{progress.nextActivity.notes}</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {!progress.lastActivity && !progress.nextActivity && (
-                          <div className="flex items-center gap-2 p-2 bg-yellow-50 rounded-lg">
-                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                            <span className="text-sm text-yellow-700">No recent or scheduled activities</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                     
-                    <div className="text-right space-y-2">
-                      <div>
-                        <p className="text-xl font-bold text-gray-900">
-                          ${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}
-                        </p>
-                        {progress.opportunity.expectedCloseDate && (
-                          <div className="flex flex-col items-end gap-1">
-                            <p className="text-sm text-gray-500">
-                              Close: {format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM yyyy')}
-                            </p>
-                            {(() => {
-                              const closeDate = safeDateConversion(progress.opportunity.expectedCloseDate);
-                              const daysUntilClose = Math.ceil((closeDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                              if (daysUntilClose <= 0) {
-                                return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">Overdue</span>;
-                              } else if (daysUntilClose <= 30) {
-                                return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-800">{daysUntilClose} days left</span>;
-                              } else if (daysUntilClose <= 60) {
-                                return <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">{Math.ceil(daysUntilClose / 7)} weeks left</span>;
-                              }
-                              return null;
-                            })()}
-                          </div>
-                        )}
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-gray-900 mb-1">
+                        ${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}
                       </div>
-                      
-                      {/* Days in current stage indicator */}
-                      {(() => {
-                        const lastActivity = progress.lastActivity;
-                        if (lastActivity) {
-                          const daysSinceLastActivity = Math.floor((new Date().getTime() - safeDateConversion(lastActivity.dateTime).getTime()) / (1000 * 60 * 60 * 24));
-                          if (daysSinceLastActivity > 7) {
-                            return (
-                              <div className="text-xs text-gray-500">
-                                {daysSinceLastActivity} days since activity
-                              </div>
-                            );
-                          }
-                        }
-                        return null;
-                      })()}
-                      
-                      {/* Commercial model */}
-                      {progress.opportunity.commercialModel && (
-                        <div className="text-xs text-gray-500">
-                          {progress.opportunity.commercialModel}
+                      <div className="text-xs text-gray-500 mb-2">Opportunity Value</div>
+                      {progress.opportunity.expectedCloseDate && (
+                        <div className="text-sm text-gray-500">
+                          Expected: {format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM yyyy')}
                         </div>
                       )}
                     </div>
                   </div>
+
+                  {/* AI Executive Summary */}
+                  {progress.opportunity.aiSummary && (
+                    <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-red-600">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="h-4 w-4 text-red-600" />
+                        <span className="text-sm font-medium text-gray-900">Executive Summary</span>
+                        {progress.opportunity.aiSummaryGeneratedAt && (
+                          <span className="text-xs text-gray-500">
+                            Updated {format(safeDateConversion(progress.opportunity.aiSummaryGeneratedAt), 'MMM d')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-800 leading-relaxed">
+                        {progress.opportunity.aiSummary}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Key Information - Vertical Layout */}
+                  <div className="space-y-4 mb-4">
+                    {/* Last Activity */}
+                    {progress.lastActivity && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          <CheckCircle className="h-3 w-3" />
+                          <span>Last Activity</span>
+                          <span className="text-gray-400">•</span>
+                          <span className="normal-case">
+                            {format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-900 font-medium">{progress.lastActivity.subject}</div>
+                        {progress.lastActivity.notes && (
+                          <div className="text-sm text-gray-600 mt-1">
+                            {progress.lastActivity.notes}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Next Activity */}
+                    {progress.nextActivity && (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          <Clock className="h-3 w-3" />
+                          <span>Next Activity</span>
+                          <span className="text-gray-400">•</span>
+                          <span className="normal-case">
+                            {format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d, yyyy')}
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-900 font-medium">{progress.nextActivity.subject}</div>
+                        {progress.nextActivity.notes && (
+                          <div className="text-sm text-gray-600 mt-1">
+                            {progress.nextActivity.notes}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Weekly Updates and Risks - Simplified */}
+                  {(progress.weeklyChanges.length > 0 || progress.riskFactors.length > 0) && (
+                    <div className="border-t border-gray-100 pt-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* This Week Updates */}
+                        {progress.weeklyChanges.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              <span className="text-sm font-medium text-gray-900">This Week</span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {progress.weeklyChanges.join(' • ')}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Risk Factors */}
+                        {progress.riskFactors.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <AlertTriangle className="w-4 h-4 text-red-500" />
+                              <span className="text-sm font-medium text-gray-900">Attention Required</span>
+                            </div>
+                            <div className="text-sm text-red-600">
+                              {progress.riskFactors.join(' • ')}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* No Activity Warning */}
+                  {!progress.lastActivity && !progress.nextActivity && (
+                    <div className="border-t border-gray-100 pt-4">
+                      <div className="flex items-center gap-2 text-amber-600">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span className="text-sm font-medium">No recent or scheduled activities</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 );
               })}
