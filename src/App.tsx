@@ -16,6 +16,8 @@ import { OpportunityDetails } from './pages/OpportunityDetails';
 import { Tasks } from './pages/Tasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { WeeklyReport } from './pages/WeeklyReport';
+import Assignments from './pages/Assignments';
+import AssignmentDetails from './pages/AssignmentDetails';
 
 import { UserProfile } from './pages/UserProfile';
 
@@ -118,6 +120,21 @@ function AppRoutes() {
       <Route path="/tasks/:id" element={
         <ProtectedRoute>
           <TaskDetails />
+        </ProtectedRoute>
+      } />
+      <Route path="/assignments" element={
+        <ProtectedRoute>
+          <Assignments />
+        </ProtectedRoute>
+      } />
+      <Route path="/assignments/new" element={
+        <ProtectedRoute>
+          <AssignmentDetails />
+        </ProtectedRoute>
+      } />
+      <Route path="/assignments/:taskId" element={
+        <ProtectedRoute>
+          <AssignmentDetails />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/" replace />} />

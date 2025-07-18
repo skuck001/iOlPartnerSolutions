@@ -11,7 +11,8 @@ import {
   ChevronDown,
   TrendingUp,
   ClipboardList,
-  Settings
+  Settings,
+  FileCheck
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
@@ -30,6 +31,7 @@ const navigationItems = [
   { name: 'Contacts', href: '/contacts', icon: Users },
   { name: 'Opportunities', href: '/opportunities', icon: Target },
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
+  { name: 'Assignments', href: '/assignments', icon: FileCheck },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {

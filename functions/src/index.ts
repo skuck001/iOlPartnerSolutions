@@ -97,6 +97,20 @@ export {
   testGetUser
 } from './modules/users/users.functions';
 
+// Export assignment functions
+export {
+  createAssignment,
+  getAssignments,
+  getAssignmentsByOwner,
+  getAssignment,
+  updateAssignment,
+  deleteAssignment,
+  addChecklistItem,
+  updateChecklistItem,
+  removeChecklistItem,
+  addProgressLogEntry
+} from './modules/assignments/assignments.functions';
+
 // Export dashboard batch functions
 export {
   batchLoadDashboardData,
