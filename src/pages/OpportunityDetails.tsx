@@ -496,33 +496,44 @@ export const OpportunityDetails: React.FC = () => {
     setSaving(true);
     
     try {
-      // Clean data to remove undefined values
-      const cleanData = Object.fromEntries(
-        Object.entries(formData).filter(([key, value]) => {
-          // Keep empty arrays and zero values, but remove undefined/null
-          if (key === 'expectedCloseDate') {
-            return value !== null; // Allow null for optional dates
-          }
-          return value !== undefined && value !== '';
-        })
-      );
-
+      // Prepare submit data with all required fields
       const submitData = {
-        ...cleanData,
+        title: formData.title,
+        summary: formData.summary,
+        accountId: formData.accountId,
+        productId: formData.productId || '',
+        contactIds: formData.contactIds,
+        stage: formData.stage,
+        priority: formData.priority,
+        useCase: formData.iolProducts.join(', ') || '', // Legacy field mapped from iolProducts
+        iolProducts: formData.iolProducts,
+        notes: formData.notes,
+        tags: formData.tags,
+        activities: formData.activities,
+        checklist: formData.checklist,
+        blockers: formData.blockers,
+        commercialModel: formData.commercialModel || '',
+        potentialVolume: formData.potentialVolume,
+        estimatedDealValue: formData.estimatedDealValue,
+        ownerId: formData.ownerId,
+        // Legacy fields for backward compatibility
+        contactsInvolved: formData.contactIds, // Map contactIds to legacy field
+        meetingHistory: [], // Initialize as empty array
+        tasks: [], // Initialize as empty array (activities replace this)
         expectedCloseDate: formData.expectedCloseDate ? Timestamp.fromDate(formData.expectedCloseDate) : null,
         lastActivityDate: formData.activities.length > 0 
           ? formData.activities.sort((a, b) => {
             try {
-              const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
-              const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
-              return timeB - timeA;
+              const dateA = safeDateConversion(a.dateTime);
+              const dateB = safeDateConversion(b.dateTime);
+              return dateB.getTime() - dateA.getTime();
             } catch (error) {
               console.error('Date sorting error:', error);
               return 0;
             }
           })[0].dateTime 
           : null,
-        createdAt: isNew ? Timestamp.now() : opportunity?.createdAt,
+        ...(isNew ? { createdAt: Timestamp.now() } : {}),
         updatedAt: Timestamp.now()
       };
 

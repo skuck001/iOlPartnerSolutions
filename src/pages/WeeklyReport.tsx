@@ -17,7 +17,9 @@ import {
   Building2,
   Package,
   Copy,
-  Sparkles
+  Sparkles,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, isWithinInterval, subWeeks, addWeeks, getISOWeek } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -78,6 +80,8 @@ interface WeeklySummary {
   totalDealValue: number;
   totalOpportunities: number;
   activeOpportunities: number;
+  closedWonOpportunities: number;
+  closedLostOpportunities: number;
   activitiesThisWeek: number;
   activitiesNextWeek: number;
   overdueActivities: number;
@@ -109,6 +113,7 @@ export const WeeklyReport: React.FC = () => {
   const [opportunityProgress, setOpportunityProgress] = useState<OpportunityProgress[]>([]);
   const [weeklyActivities, setWeeklyActivities] = useState<(ActivityType & { opportunity: Opportunity; account: Account })[]>([]);
   const [nextWeekActivities, setNextWeekActivities] = useState<(ActivityType & { opportunity: Opportunity; account: Account })[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetchData();
@@ -119,6 +124,32 @@ export const WeeklyReport: React.FC = () => {
       analyzeWeeklyData();
     }
   }, [opportunities, accounts, contacts, selectedDate]);
+
+  // Initialize all groups as expanded when opportunity progress changes
+  useEffect(() => {
+    if (opportunityProgress.length > 0) {
+      const accountNames = opportunityProgress
+        .slice(0, 15)
+        .reduce((accounts, progress) => {
+          const accountName = progress.account?.name || 'Unknown Account';
+          accounts.add(accountName);
+          return accounts;
+        }, new Set<string>());
+      
+      const initialExpandedState: Record<string, boolean> = {};
+      accountNames.forEach(accountName => {
+        initialExpandedState[accountName] = true; // Start expanded
+      });
+      setExpandedGroups(initialExpandedState);
+    }
+  }, [opportunityProgress]);
+
+  const toggleGroup = (accountName: string) => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [accountName]: !prev[accountName]
+    }));
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -151,6 +182,9 @@ export const WeeklyReport: React.FC = () => {
     const activeOpps = opportunities.filter(opp => 
       !['Closed-Won', 'Closed-Lost'].includes(opp.stage)
     );
+    
+    const closedWonOpps = opportunities.filter(opp => opp.stage === 'Closed-Won');
+    const closedLostOpps = opportunities.filter(opp => opp.stage === 'Closed-Lost');
 
     const totalDealValue = activeOpps.reduce((sum, opp) => sum + (opp.estimatedDealValue || 0), 0);
 
@@ -178,12 +212,12 @@ export const WeeklyReport: React.FC = () => {
         allActivities.push(enhancedActivity);
 
         // This week activities
-        if (isWithinInterval(activityDate, { start: weekStart, end: weekEnd })) {
+        if (isWithinInterval(activityDate, { start: new Date(weekStart), end: new Date(weekEnd) })) {
           thisWeekActivities.push(enhancedActivity);
         }
 
         // Next week activities
-        if (isWithinInterval(activityDate, { start: nextWeekStart, end: nextWeekEnd })) {
+        if (isWithinInterval(activityDate, { start: new Date(nextWeekStart), end: new Date(nextWeekEnd) })) {
           nextWeekActivities.push(enhancedActivity);
         }
 
@@ -196,8 +230,8 @@ export const WeeklyReport: React.FC = () => {
 
     setWeeklyActivities(thisWeekActivities.sort((a, b) => {
       try {
-        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
-        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : safeDateConversion(a.dateTime).getTime();
+        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : safeDateConversion(b.dateTime).getTime();
         return timeB - timeA;
       } catch (error) {
         console.error('Date sorting error:', error);
@@ -206,8 +240,8 @@ export const WeeklyReport: React.FC = () => {
     }));
     setNextWeekActivities(nextWeekActivities.sort((a, b) => {
       try {
-        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
-        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+        const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : safeDateConversion(a.dateTime).getTime();
+        const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : safeDateConversion(b.dateTime).getTime();
         return timeA - timeB;
       } catch (error) {
         console.error('Date sorting error:', error);
@@ -219,6 +253,8 @@ export const WeeklyReport: React.FC = () => {
       totalDealValue,
       totalOpportunities: opportunities.length,
       activeOpportunities: activeOpps.length,
+      closedWonOpportunities: closedWonOpps.length,
+      closedLostOpportunities: closedLostOpps.length,
       activitiesThisWeek: thisWeekActivities.length,
       activitiesNextWeek: nextWeekActivities.length,
       overdueActivities: overdueCount,
@@ -230,8 +266,8 @@ export const WeeklyReport: React.FC = () => {
       const account = accounts.find(a => a.id === opp.accountId);
       const activities = (opp.activities || []).sort((a, b) => {
         try {
-          const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : new Date(a.dateTime).getTime();
-          const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : new Date(b.dateTime).getTime();
+          const timeA = (a.dateTime as any)?.toMillis ? (a.dateTime as any).toMillis() : safeDateConversion(a.dateTime).getTime();
+          const timeB = (b.dateTime as any)?.toMillis ? (b.dateTime as any).toMillis() : safeDateConversion(b.dateTime).getTime();
           return timeB - timeA;
         } catch (error) {
           console.error('Date sorting error:', error);
@@ -244,7 +280,7 @@ export const WeeklyReport: React.FC = () => {
       // Detect weekly changes (simplified - would need proper change tracking)
       const weeklyChanges: string[] = [];
       const thisWeekActivityCount = activities.filter(a => 
-        isWithinInterval(safeDateConversion(a.dateTime), { start: weekStart, end: weekEnd })
+        isWithinInterval(safeDateConversion(a.dateTime), { start: new Date(weekStart), end: new Date(weekEnd) })
       ).length;
 
       if (thisWeekActivityCount > 0) {
@@ -349,6 +385,8 @@ export const WeeklyReport: React.FC = () => {
       [''],
       ['EXECUTIVE SUMMARY'],
       ['Active Opportunities', summary?.activeOpportunities || 0],
+      ['Closed Won Opportunities', summary?.closedWonOpportunities || 0],
+      ['Closed Lost Opportunities', summary?.closedLostOpportunities || 0],
       ['Total Pipeline Value', `$${(summary?.totalDealValue || 0).toLocaleString()}`],
       ['Activities This Week', summary?.activitiesThisWeek || 0],
       ['Upcoming Activities', summary?.activitiesNextWeek || 0],
@@ -367,7 +405,6 @@ export const WeeklyReport: React.FC = () => {
       'Stage',
       'Priority',
       'Deal Value',
-      'Region',
       'iOL Products',
       'Commercial Model',
       'Expected Close Date',
@@ -385,7 +422,6 @@ export const WeeklyReport: React.FC = () => {
         progress.opportunity.stage,
         progress.opportunity.priority || 'Medium',
         `$${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}`,
-        progress.opportunity.region || '',
         progress.opportunity.iolProducts?.join(', ') || '',
         progress.opportunity.commercialModel || '',
         progress.opportunity.expectedCloseDate ? format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM d, yyyy') : '',
@@ -456,7 +492,7 @@ export const WeeklyReport: React.FC = () => {
     XLSX.writeFile(workbook, filename);
   };
 
-  const copyToClipboard = async () => {
+  const generateEmailContent = () => {
     const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
     
@@ -466,6 +502,8 @@ export const WeeklyReport: React.FC = () => {
     emailContent += `EXECUTIVE SUMMARY\n`;
     emailContent += `================\n`;
     emailContent += `Active Opportunities: ${summary?.activeOpportunities || 0}\n`;
+    emailContent += `Closed Won: ${summary?.closedWonOpportunities || 0}\n`;
+    emailContent += `Closed Lost: ${summary?.closedLostOpportunities || 0}\n`;
     emailContent += `Total Pipeline Value: $${(summary?.totalDealValue || 0).toLocaleString()}\n`;
     emailContent += `Activities This Week: ${summary?.activitiesThisWeek || 0}\n`;
     emailContent += `Upcoming Activities: ${summary?.activitiesNextWeek || 0}\n`;
@@ -491,7 +529,12 @@ export const WeeklyReport: React.FC = () => {
       emailContent += `\n`;
     });
 
+    return emailContent;
+  };
+
+  const copyToClipboard = async () => {
     try {
+      const emailContent = generateEmailContent();
       await navigator.clipboard.writeText(emailContent);
       alert('Report copied to clipboard! You can now paste it into an email.');
     } catch (err) {
@@ -500,95 +543,147 @@ export const WeeklyReport: React.FC = () => {
     }
   };
 
+  const openInOutlook = () => {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
+    
+    const subject = `Weekly Sales Report - ${format(weekStart, 'MMM d')} to ${format(weekEnd, 'MMM d, yyyy')}`;
+    const body = generateEmailContent();
+    
+    // URL encode the subject and body
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    
+    // Create mailto URL
+    const mailtoUrl = `mailto:?subject=${encodedSubject}&body=${encodedBody}`;
+    
+    // Open email client
+    try {
+      window.open(mailtoUrl);
+    } catch (err) {
+      console.error('Failed to open email client:', err);
+      alert('Failed to open email client. Please try copying the content instead.');
+    }
+  };
+
   const copyOpportunityCards = async () => {
     const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
     const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
 
+    // Group opportunities by account (matching the visual display)
+    const groupedByAccount = opportunityProgress.slice(0, 15).reduce((groups, progress) => {
+      const accountName = progress.account?.name || 'Unknown Account';
+      if (!groups[accountName]) {
+        groups[accountName] = [];
+      }
+      groups[accountName].push(progress);
+      return groups;
+    }, {} as Record<string, typeof opportunityProgress>);
+
     let emailContent = `OPPORTUNITY PROGRESS & STATUS\n`;
     emailContent += `Week of ${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}\n`;
-    emailContent += `${'='.repeat(50)}\n\n`;
+    emailContent += `${'='.repeat(80)}\n\n`;
 
-    opportunityProgress.slice(0, 15).forEach((progress, index) => {
-      // Card Header
-      emailContent += `${index + 1}. ${progress.opportunity.title.toUpperCase()}\n`;
+    // Create content for each account group
+    Object.keys(groupedByAccount).sort().forEach((accountName) => {
+      const accountOpportunities = groupedByAccount[accountName];
       
-      // Priority badge
-      if (progress.opportunity.priority === 'Critical' || progress.opportunity.priority === 'High') {
-        emailContent += `   🔴 ${progress.opportunity.priority} Priority\n`;
-      }
-      
-      // Company and Contact Info
-      emailContent += `   🏢 ${progress.account?.name || 'Unknown Account'}`;
-      if (progress.opportunity.iolProducts && progress.opportunity.iolProducts.length > 0) {
-        emailContent += ` • ${progress.opportunity.iolProducts.slice(0, 2).join(', ')}`;
-        if (progress.opportunity.iolProducts.length > 2) {
-          emailContent += ` +${progress.opportunity.iolProducts.length - 2} more`;
+      // Account header
+      emailContent += `🏢 ${accountName.toUpperCase()} (${accountOpportunities.length} opportunit${accountOpportunities.length !== 1 ? 'ies' : 'y'})\n`;
+      emailContent += `${'─'.repeat(80)}\n\n`;
+
+      // Create table header
+      emailContent += `| Opportunity | Stage | Value | Priority | Last Activity | Next Activity | Status |\n`;
+      emailContent += `|-------------|-------|-------|----------|---------------|---------------|--------|\n`;
+
+      // Add each opportunity as a table row
+      accountOpportunities.forEach((progress) => {
+        const opportunityName = progress.opportunity.title.length > 25 
+          ? progress.opportunity.title.substring(0, 22) + '...' 
+          : progress.opportunity.title;
+        
+        const stage = progress.opportunity.stage;
+        
+        const value = `$${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}`;
+        
+        const priority = progress.opportunity.priority || 'Medium';
+        
+        const lastActivity = progress.lastActivity 
+          ? `${progress.lastActivity.subject.substring(0, 20)}${progress.lastActivity.subject.length > 20 ? '...' : ''} (${format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d')})`
+          : 'None';
+        
+        const nextActivity = progress.nextActivity 
+          ? `${progress.nextActivity.subject.substring(0, 20)}${progress.nextActivity.subject.length > 20 ? '...' : ''} (${format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d')})`
+          : 'None';
+        
+        let status = '';
+        if (progress.riskFactors.length > 0) {
+          status = '⚠️ Risks';
+        } else if (progress.weeklyChanges.length > 0) {
+          status = '📈 Active';
+        } else {
+          status = '✅ On Track';
         }
-      }
+
+        emailContent += `| ${opportunityName} | ${stage} | ${value} | ${priority} | ${lastActivity} | ${nextActivity} | ${status} |\n`;
+      });
+
       emailContent += `\n`;
-      
-      // Contacts
-      const opportunityContacts = contacts.filter(c => progress.opportunity.contactIds.includes(c.id || ''));
-      if (opportunityContacts.length > 0) {
-        emailContent += `   👥 ${opportunityContacts.map(c => c.name).join(', ')}\n`;
-      }
-      
-      // Stage and Value
-      emailContent += `   📊 Stage: ${progress.opportunity.stage}\n`;
-      emailContent += `   💰 Value: $${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}`;
-      if (progress.opportunity.expectedCloseDate) {
-        emailContent += ` • Expected: ${format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM yyyy')}`;
-      }
-      emailContent += `\n\n`;
 
-      // AI Executive Summary
-      if (progress.opportunity.aiSummary) {
-        emailContent += `   ✨ EXECUTIVE SUMMARY:\n`;
-        emailContent += `   ${progress.opportunity.aiSummary}\n`;
-        if (progress.opportunity.aiSummaryGeneratedAt) {
-          emailContent += `   (Updated ${format(safeDateConversion(progress.opportunity.aiSummaryGeneratedAt), 'MMM d')})\n`;
-        }
+      // Add detailed information for high priority or risky opportunities
+      const importantOpportunities = accountOpportunities.filter(progress => 
+        progress.opportunity.priority === 'Critical' || 
+        progress.opportunity.priority === 'High' || 
+        progress.riskFactors.length > 0
+      );
+
+      if (importantOpportunities.length > 0) {
+        emailContent += `📋 DETAILED NOTES FOR ${accountName.toUpperCase()}:\n`;
+        emailContent += `${'-'.repeat(50)}\n`;
+
+        importantOpportunities.forEach((progress) => {
+          emailContent += `\n• ${progress.opportunity.title}\n`;
+          
+          if (progress.opportunity.priority === 'Critical' || progress.opportunity.priority === 'High') {
+            emailContent += `  🔴 ${progress.opportunity.priority} Priority\n`;
+          }
+
+          // Contacts
+          const opportunityContacts = contacts.filter(c => progress.opportunity.contactIds.includes(c.id || ''));
+          if (opportunityContacts.length > 0) {
+            emailContent += `  👥 Contacts: ${opportunityContacts.map(c => c.name).join(', ')}\n`;
+          }
+
+          // Products
+          if (progress.opportunity.iolProducts && progress.opportunity.iolProducts.length > 0) {
+            emailContent += `  📦 Products: ${progress.opportunity.iolProducts.join(', ')}\n`;
+          }
+
+          // AI Summary
+          if (progress.opportunity.aiSummary) {
+            emailContent += `  ✨ Executive Summary: ${progress.opportunity.aiSummary}\n`;
+          }
+
+          // Risk factors
+          if (progress.riskFactors.length > 0) {
+            emailContent += `  ⚠️ Attention Required: ${progress.riskFactors.join(' • ')}\n`;
+          }
+
+          // Weekly changes
+          if (progress.weeklyChanges.length > 0) {
+            emailContent += `  📈 This Week: ${progress.weeklyChanges.join(' • ')}\n`;
+          }
+        });
+
         emailContent += `\n`;
       }
 
-      // Activities
-      if (progress.lastActivity) {
-        emailContent += `   ✅ LAST ACTIVITY (${format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d, yyyy')}):\n`;
-        emailContent += `      ${progress.lastActivity.subject}\n`;
-        if (progress.lastActivity.notes) {
-          emailContent += `      Notes: ${progress.lastActivity.notes}\n`;
-        }
-        emailContent += `\n`;
-      }
-
-      if (progress.nextActivity) {
-        emailContent += `   🕐 NEXT ACTIVITY (${format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d, yyyy')}):\n`;
-        emailContent += `      ${progress.nextActivity.subject}\n`;
-        if (progress.nextActivity.notes) {
-          emailContent += `      Notes: ${progress.nextActivity.notes}\n`;
-        }
-        emailContent += `\n`;
-      }
-
-      // Weekly Updates and Risks
-      if (progress.weeklyChanges.length > 0) {
-        emailContent += `   📈 THIS WEEK: ${progress.weeklyChanges.join(' • ')}\n`;
-      }
-
-      if (progress.riskFactors.length > 0) {
-        emailContent += `   ⚠️  ATTENTION REQUIRED: ${progress.riskFactors.join(' • ')}\n`;
-      }
-
-      if (!progress.lastActivity && !progress.nextActivity) {
-        emailContent += `   ⚠️  No recent or scheduled activities\n`;
-      }
-
-      emailContent += `\n${'-'.repeat(60)}\n\n`;
+      emailContent += `\n`;
     });
 
     try {
       await navigator.clipboard.writeText(emailContent);
-      alert('Opportunity cards copied to clipboard! You can now paste them into an email.');
+      alert('Opportunity cards copied to clipboard! The content is now formatted as tables for easy pasting.');
     } catch (err) {
       console.error('Failed to copy opportunity cards to clipboard:', err);
       alert('Failed to copy opportunity cards to clipboard. Please try again.');
@@ -643,6 +738,13 @@ export const WeeklyReport: React.FC = () => {
               Copy Cards
             </button>
             <button
+              onClick={openInOutlook}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
+            >
+              <Mail className="h-4 w-4" />
+              Open in Outlook
+            </button>
+            <button
               onClick={exportToExcel}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
             >
@@ -666,7 +768,7 @@ export const WeeklyReport: React.FC = () => {
               <h2 className="text-xl font-semibold text-gray-900">Executive Summary</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -674,6 +776,26 @@ export const WeeklyReport: React.FC = () => {
                     <p className="text-2xl font-bold text-blue-900">{summary?.activeOpportunities || 0}</p>
                   </div>
                   <Target className="h-8 w-8 text-blue-500" />
+                </div>
+              </div>
+
+              <div className="bg-emerald-50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-emerald-600">Closed Won</p>
+                    <p className="text-2xl font-bold text-emerald-900">{summary?.closedWonOpportunities || 0}</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-emerald-500" />
+                </div>
+              </div>
+
+              <div className="bg-red-50 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-red-600">Closed Lost</p>
+                    <p className="text-2xl font-bold text-red-900">{summary?.closedLostOpportunities || 0}</p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-red-500" />
                 </div>
               </div>
 
@@ -736,8 +858,44 @@ export const WeeklyReport: React.FC = () => {
           {/* Opportunity Progress */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-6">Opportunity Progress & Status</h3>
-            <div className="space-y-3">
-              {opportunityProgress.slice(0, 15).map((progress) => {
+            <div className="space-y-8">
+              {(() => {
+                // Group opportunities by account
+                const groupedByAccount = opportunityProgress.slice(0, 15).reduce((groups, progress) => {
+                  const accountName = progress.account?.name || 'Unknown Account';
+                  if (!groups[accountName]) {
+                    groups[accountName] = [];
+                  }
+                  groups[accountName].push(progress);
+                  return groups;
+                }, {} as Record<string, typeof opportunityProgress>);
+
+                // Sort account names and render groups
+                return Object.keys(groupedByAccount)
+                  .sort()
+                  .map((accountName) => (
+                    <div key={accountName} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      {/* Account Header */}
+                      <div 
+                        className="flex items-center gap-3 mb-4 pb-3 border-b border-gray-300 cursor-pointer hover:bg-gray-100 -m-4 p-4 rounded-t-lg transition-colors"
+                        onClick={() => toggleGroup(accountName)}
+                      >
+                        {expandedGroups[accountName] ? (
+                          <ChevronDown className="h-5 w-5 text-gray-600" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5 text-gray-600" />
+                        )}
+                        <Building2 className="h-5 w-5 text-gray-600" />
+                        <h4 className="text-lg font-semibold text-gray-900">{accountName}</h4>
+                        <span className="text-sm text-gray-500">
+                          ({groupedByAccount[accountName].length} opportunit{groupedByAccount[accountName].length !== 1 ? 'ies' : 'y'})
+                        </span>
+                      </div>
+                      
+                      {/* Opportunities for this account */}
+                      {expandedGroups[accountName] && (
+                        <div className="space-y-3">
+                          {groupedByAccount[accountName].map((progress) => {
                 return (
                 <div key={progress.opportunity.id} className="bg-white border border-gray-100 rounded-lg p-6 hover:shadow-md transition-all duration-200">
                   {/* Header Section */}
@@ -909,8 +1067,13 @@ export const WeeklyReport: React.FC = () => {
                     </div>
                   )}
                 </div>
-                );
-              })}
+                        );
+                        })}
+                        </div>
+                      )}
+                    </div>
+                  ));
+              })()}
             </div>
           </div>
 

@@ -120,6 +120,7 @@ export const Opportunities: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [stageFilter, setStageFilter] = useState<OpportunityStage | 'All'>('All');
   const [priorityFilter, setPriorityFilter] = useState<OpportunityPriority | 'All'>('All');
+  const [excludeClosed, setExcludeClosed] = useState(true); // New state for exclude closed checkbox
 
   useEffect(() => {
     fetchAllData();
@@ -254,7 +255,10 @@ export const Opportunities: React.FC = () => {
       const matchesStage = stageFilter === 'All' || opp.stage === stageFilter;
       const matchesPriority = priorityFilter === 'All' || opp.priority === priorityFilter;
       
-      return matchesSearch && matchesStage && matchesPriority;
+      // Add exclude closed filter
+      const matchesClosedFilter = !excludeClosed || (opp.stage !== 'Closed-Won' && opp.stage !== 'Closed-Lost');
+      
+      return matchesSearch && matchesStage && matchesPriority && matchesClosedFilter;
     })
     .sort((a, b) => {
       let aValue: any, bValue: any;
@@ -354,7 +358,7 @@ export const Opportunities: React.FC = () => {
         'Product Name': product?.name || '',
         'Stage': opportunity.stage,
         'Priority': opportunity.priority,
-        'Region': opportunity.region,
+        'Region': account?.region || '',
         'Deal Value': opportunity.estimatedDealValue || 0,
         'Expected Close Date': opportunity.expectedCloseDate 
           ? format(toDate(opportunity.expectedCloseDate), 'yyyy-MM-dd') 
@@ -430,32 +434,12 @@ export const Opportunities: React.FC = () => {
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Opportunities</h1>
             <p className="text-sm text-gray-600 mt-1">
               {filteredAndSortedOpportunities.length} of {opportunities?.length || 0} opportunities
             </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleExportToExcel}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
-              title={`Export ${filteredAndSortedOpportunities.length} opportunities to Excel`}
-            >
-              <Download className="h-4 w-4" />
-              Export Excel
-              <span className="ml-1 px-2 py-0.5 bg-green-500 text-green-100 text-xs rounded-full">
-                {filteredAndSortedOpportunities.length}
-              </span>
-            </button>
-            <button
-              onClick={handleAdd}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              New Opportunity
-            </button>
           </div>
         </div>
         
@@ -472,7 +456,18 @@ export const Opportunities: React.FC = () => {
             />
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Exclude Closed Checkbox */}
+            <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
+              <input
+                type="checkbox"
+                checked={excludeClosed}
+                onChange={(e) => setExcludeClosed(e.target.checked)}
+                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+              />
+              <span className="text-sm text-gray-700 whitespace-nowrap">Exclude Closed</span>
+            </label>
+            
             <select
               value={stageFilter}
               onChange={(e) => setStageFilter(e.target.value as OpportunityStage | 'All')}
@@ -662,7 +657,7 @@ export const Opportunities: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-1 mt-2">
                                   <MapPin className="h-3 w-3 text-gray-400" />
-                                  <span className="text-xs text-gray-500">{opportunity.region}</span>
+                                  <span className="text-xs text-gray-500">{account?.region || 'Unknown'}</span>
                                 </div>
                               </div>
                             </td>
@@ -864,6 +859,52 @@ export const Opportunities: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50">
+        {/* Export Button */}
+        <button
+          onClick={handleExportToExcel}
+          className="group relative inline-flex items-center justify-center w-14 h-14 bg-green-600 text-white rounded-full hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          title={`Export ${filteredAndSortedOpportunities.length} opportunities to Excel`}
+        >
+          <Download className="h-6 w-6" />
+          <span className="absolute right-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            Export Excel ({filteredAndSortedOpportunities.length})
+          </span>
+        </button>
+
+        {/* New Opportunity Button */}
+        <button
+          onClick={handleAdd}
+          className="group relative inline-flex items-center justify-center w-14 h-14 bg-primary-600 text-white rounded-full hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-500 focus:ring-opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          title="Create New Opportunity"
+        >
+          <Plus className="h-6 w-6" />
+          <span className="absolute right-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            New Opportunity
+          </span>
+        </button>
+      </div>
+
+      {/* Mobile Floating Action Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3 z-40">
+        <button
+          onClick={handleExportToExcel}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
+          title={`Export ${filteredAndSortedOpportunities.length} opportunities to Excel`}
+        >
+          <Download className="h-5 w-5" />
+          <span>Export ({filteredAndSortedOpportunities.length})</span>
+        </button>
+        <button
+          onClick={handleAdd}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors shadow-sm"
+        >
+          <Plus className="h-5 w-5" />
+          <span>New</span>
+        </button>
       </div>
     </div>
   );
