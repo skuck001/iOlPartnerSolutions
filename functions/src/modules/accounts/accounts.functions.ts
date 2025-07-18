@@ -141,7 +141,27 @@ export const bulkUpdateAccounts = onCall(
     const { accountIds, updateData } = validateData(
       z.object({
         accountIds: z.array(commonSchemas.id),
-        updateData: accountSchemas.update.omit({ accountId: true }).partial()
+        updateData: z.object({
+          name: z.string().min(1).max(100).optional(),
+          region: z.string().min(1).optional(),
+          website: z.string().url('Invalid URL format').or(z.literal('')).nullish(),
+          parentAccountId: z.string().nullish(),
+          headquarters: z.string().nullish(),
+          description: z.string().nullish(),
+          logo: z.string().nullish(),
+          primaryContact: z.string().nullish(),
+          tags: z.array(z.string()).default([]),
+          notes: z.string().nullish()
+        }).transform(data => {
+          // Remove null, undefined, and empty string values to prevent Firestore errors
+          const cleanData: any = {};
+          Object.entries(data).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+              cleanData[key] = value;
+            }
+          });
+          return cleanData;
+        })
       }),
       request.data
     );

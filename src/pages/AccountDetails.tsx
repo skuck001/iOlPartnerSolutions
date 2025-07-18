@@ -256,22 +256,22 @@ export const AccountDetails: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <div className="w-8 h-8 border-b-2 rounded-full animate-spin border-primary-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col relative">
+    <div className="relative flex flex-col min-h-screen">
       {/* Compact Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3">
+      <div className="px-6 py-3 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Link
               to="/accounts"
               className="p-1.5 text-gray-400 hover:text-gray-600 transition-colors"
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
               <h1 className="text-xl font-semibold text-gray-900">
@@ -297,23 +297,23 @@ export const AccountDetails: React.FC = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto pb-20">
-        <div className="max-w-7xl mx-auto p-4">
+      <div className="flex-1 pb-20 overflow-auto">
+        <div className="p-4 mx-auto max-w-7xl">
           <form id="account-form" onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               
               {/* Left Column (2/3) - Core Information */}
-              <div className="lg:col-span-2 space-y-4">
+              <div className="space-y-4 lg:col-span-2">
                 
                 {/* Basic Information */}
-                <div className="bg-white shadow rounded-lg p-4">
+                <div className="p-4 bg-white rounded-lg shadow">
                   <div className="flex items-center gap-2 mb-3">
-                    <Building2 className="h-4 w-4 text-gray-500" />
+                    <Building2 className="w-4 h-4 text-gray-500" />
                     <h2 className="text-base font-medium text-gray-900">Account Information</h2>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Account Name</label>
+                      <label className="block mb-1 text-xs font-medium text-gray-700">Account Name</label>
                       <input
                         type="text"
                         value={formData.name}
@@ -324,7 +324,7 @@ export const AccountDetails: React.FC = () => {
                     </div>
                     
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Headoffice Country</label>
+                      <label className="block mb-1 text-xs font-medium text-gray-700">Headoffice Country</label>
                       <input
                         type="text"
                         value={formData.region}
@@ -336,7 +336,7 @@ export const AccountDetails: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Website</label>
+                      <label className="block mb-1 text-xs font-medium text-gray-700">Website</label>
                       <input
                         type="url"
                         value={formData.website}
@@ -347,7 +347,7 @@ export const AccountDetails: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Parent Account (Optional)</label>
+                      <label className="block mb-1 text-xs font-medium text-gray-700">Parent Account (Optional)</label>
                       <select
                         value={formData.parentAccountId}
                         onChange={(e) => setFormData({ ...formData, parentAccountId: e.target.value })}
@@ -377,10 +377,10 @@ export const AccountDetails: React.FC = () => {
 
                 {/* Products - Compact Version */}
                 {relatedProducts.length > 0 && (
-                  <div className="bg-white shadow rounded-lg p-4">
+                  <div className="p-4 bg-white rounded-lg shadow">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-gray-500" />
+                        <Package className="w-4 h-4 text-gray-500" />
                         <h2 className="text-base font-medium text-gray-900">Products ({relatedProducts.length})</h2>
                       </div>
                       <Link
@@ -390,23 +390,23 @@ export const AccountDetails: React.FC = () => {
                         View all
                       </Link>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       {relatedProducts.slice(0, 4).map((product) => (
-                        <div key={product.id} className="bg-gray-50 rounded-lg p-2 border border-gray-200">
+                        <div key={product.id} className="p-2 border border-gray-200 rounded-lg bg-gray-50">
                           <Link
                             to={`/products/${product.id}`}
-                            className="text-sm font-medium text-gray-900 hover:text-primary-600 block truncate"
+                            className="block text-sm font-medium text-gray-900 truncate hover:text-primary-600"
                           >
                             {product.name}
                           </Link>
                           {product.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-1">{product.description}</p>
+                            <p className="mt-1 text-xs text-gray-500 line-clamp-1">{product.description}</p>
                           )}
                         </div>
                       ))}
                     </div>
                     {relatedProducts.length > 4 && (
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="mt-2 text-xs text-gray-500">
                         +{relatedProducts.length - 4} more products
                       </p>
                     )}
@@ -415,10 +415,10 @@ export const AccountDetails: React.FC = () => {
 
                 {/* Opportunities */}
                 {relatedOpportunities.length > 0 && (
-                  <div className="bg-white shadow rounded-lg p-4">
+                  <div className="p-4 bg-white rounded-lg shadow">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <Briefcase className="h-4 w-4 text-gray-500" />
+                        <Briefcase className="w-4 h-4 text-gray-500" />
                         <h2 className="text-base font-medium text-gray-900">Opportunities ({relatedOpportunities.length})</h2>
                       </div>
                       <Link
@@ -430,17 +430,17 @@ export const AccountDetails: React.FC = () => {
                     </div>
                     <div className="space-y-2">
                       {relatedOpportunities.map((opportunity) => (
-                        <div key={opportunity.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                        <div key={opportunity.id} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
                               <Link
                                 to={`/opportunities/${opportunity.id}`}
-                                className="text-sm font-medium text-gray-900 hover:text-primary-600 block"
+                                className="block text-sm font-medium text-gray-900 hover:text-primary-600"
                               >
                                 {opportunity.title}
                               </Link>
                               {opportunity.summary && (
-                                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{opportunity.summary}</p>
+                                <p className="mt-1 text-xs text-gray-500 line-clamp-2">{opportunity.summary}</p>
                               )}
                               <div className="flex items-center gap-2 mt-2">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -473,9 +473,9 @@ export const AccountDetails: React.FC = () => {
               <div className="space-y-4">
                 
                 {/* Tags */}
-                <div className="bg-white shadow rounded-lg p-4">
+                <div className="p-4 bg-white rounded-lg shadow">
                   <div className="flex items-center gap-2 mb-3">
-                    <X className="h-4 w-4 text-gray-500" />
+                    <X className="w-4 h-4 text-gray-500" />
                     <h2 className="text-base font-medium text-gray-900">Tags</h2>
                   </div>
                   <div className="space-y-3">
@@ -483,7 +483,7 @@ export const AccountDetails: React.FC = () => {
                       {formData.tags.map((tag, index) => (
                         <span
                           key={index}
-                          className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-800 bg-blue-100 rounded-full"
                         >
                           {tag}
                           <button
@@ -491,7 +491,7 @@ export const AccountDetails: React.FC = () => {
                             onClick={() => handleRemoveTag(tag)}
                             className="ml-1.5 text-blue-600 hover:text-blue-800"
                           >
-                            <X className="h-3 w-3" />
+                            <X className="w-3 h-3" />
                           </button>
                         </span>
                       ))}
@@ -517,10 +517,10 @@ export const AccountDetails: React.FC = () => {
                 </div>
 
                 {/* Contacts */}
-                <div className="bg-white shadow rounded-lg p-4">
+                <div className="p-4 bg-white rounded-lg shadow">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-gray-500" />
+                      <Users className="w-4 h-4 text-gray-500" />
                       <h2 className="text-base font-medium text-gray-900">
                         Contacts ({relatedContacts.length})
                       </h2>
@@ -528,29 +528,29 @@ export const AccountDetails: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowCreateContact(!showCreateContact)}
-                      className="px-2 py-1 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-md hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
+                      className="px-2 py-1 text-xs font-medium border rounded-md text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
                     >
-                      <Plus className="h-3 w-3 mr-1 inline" />
+                      <Plus className="inline w-3 h-3 mr-1" />
                       Add
                     </button>
                   </div>
 
                   {/* Account contacts */}
                   {relatedContacts.length > 0 && (
-                    <div className="space-y-2 mb-3">
+                    <div className="mb-3 space-y-2">
                       {relatedContacts.map((contact) => (
-                        <div key={contact.id} className="bg-blue-50 border-blue-200 rounded-lg p-2 border relative">
+                        <div key={contact.id} className="relative p-2 border border-blue-200 rounded-lg bg-blue-50">
                           <button
                             type="button"
                             onClick={() => handleRemoveContact(contact.id || '')}
-                            className="absolute top-1 right-1 text-blue-400 hover:text-red-600"
+                            className="absolute text-blue-400 top-1 right-1 hover:text-red-600"
                             title="Remove contact"
                           >
-                            <X className="h-3 w-3" />
+                            <X className="w-3 h-3" />
                           </button>
                           <Link
                             to={`/contacts/${contact.id}`}
-                            className="text-xs font-medium text-blue-900 hover:text-blue-700 block truncate pr-4"
+                            className="block pr-4 text-xs font-medium text-blue-900 truncate hover:text-blue-700"
                           >
                             {contact.name}
                           </Link>
@@ -570,8 +570,8 @@ export const AccountDetails: React.FC = () => {
 
                   {/* Create contact form (collapsible) */}
                   {showCreateContact && (
-                    <div className="border border-gray-200 rounded-lg p-3 mb-3 bg-gray-50">
-                      <h3 className="text-sm font-medium text-gray-900 mb-2">Create New Contact</h3>
+                    <div className="p-3 mb-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <h3 className="mb-2 text-sm font-medium text-gray-900">Create New Contact</h3>
                       <div className="space-y-2">
                         <input
                           type="text"
@@ -615,7 +615,7 @@ export const AccountDetails: React.FC = () => {
                             type="button"
                             onClick={handleCreateContact}
                             disabled={!newContact.name.trim() || !newContact.email.trim() || isNew}
-                            className="px-2 py-1 text-xs font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-md hover:bg-primary-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-2 py-1 text-xs font-medium border rounded-md text-primary-700 bg-primary-50 border-primary-200 hover:bg-primary-100 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Create
                           </button>
@@ -626,8 +626,8 @@ export const AccountDetails: React.FC = () => {
 
                   {/* Empty state */}
                   {relatedContacts.length === 0 && (
-                    <div className="text-center py-4">
-                      <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    <div className="py-4 text-center">
+                      <Users className="w-8 h-8 mx-auto mb-2 text-gray-300" />
                       <p className="text-sm text-gray-500">No contacts yet</p>
                       <p className="text-xs text-gray-400">
                         {isNew ? 'Save the account first to add contacts' : 'Add contacts to this account'}
@@ -638,9 +638,9 @@ export const AccountDetails: React.FC = () => {
 
                 {/* Quick Stats */}
                 {!isNew && (
-                  <div className="bg-white shadow rounded-lg p-4">
+                  <div className="p-4 bg-white rounded-lg shadow">
                     <div className="flex items-center gap-2 mb-3">
-                      <Calendar className="h-4 w-4 text-gray-500" />
+                      <Calendar className="w-4 h-4 text-gray-500" />
                       <h2 className="text-base font-medium text-gray-900">Details</h2>
                     </div>
                     <div className="space-y-2 text-sm">
@@ -703,13 +703,13 @@ export const AccountDetails: React.FC = () => {
         type="submit"
         form="account-form"
         disabled={saving || !formData.name.trim()}
-        className="fixed bottom-4 right-4 bg-primary-600 text-white p-3 rounded-full shadow-lg hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-500 focus:ring-opacity-50 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed z-50"
+        className="fixed z-50 p-3 text-white transition-all duration-200 rounded-full shadow-lg bottom-4 right-4 bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-500 focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-not-allowed"
         title={saving ? 'Saving...' : 'Save Account'}
       >
         {saving ? (
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+          <div className="w-5 h-5 border-b-2 border-white rounded-full animate-spin"></div>
         ) : (
-          <Save className="h-5 w-5" />
+          <Save className="w-5 h-5" />
         )}
       </button>
     </div>

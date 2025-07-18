@@ -33,32 +33,51 @@ const CreateProductSchema = z.object({
   name: z.string().min(1),
   accountId: z.string().min(1),
   category: z.enum(['Business Intelligence', 'Revenue Management', 'Distribution', 'Guest Experience', 'Operations', 'Connectivity', 'Booking Engine', 'Channel Management', 'Other']),
-  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).nullish().transform(val => val ?? undefined),
-  description: z.string().nullish().transform(val => val ?? undefined),
-  version: z.string().nullish().transform(val => val ?? undefined),
-  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).nullish().transform(val => val ?? undefined),
-  website: z.string().nullish().transform(val => val ?? undefined),
-  contactIds: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  targetMarket: z.string().nullish().transform(val => val ?? undefined),
-  pricing: z.string().nullish().transform(val => val ?? undefined),
-  notes: z.string().nullish().transform(val => val ?? undefined)
+  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).nullish(),
+  description: z.string().nullish(),
+  version: z.string().nullish(),
+  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).nullish(),
+  website: z.string().nullish(),
+  contactIds: z.array(z.string()).nullish(),
+  tags: z.array(z.string()).nullish(),
+  targetMarket: z.string().nullish(),
+  pricing: z.string().nullish(),
+  notes: z.string().nullish(),
+  ownerId: z.string().min(1)
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const UpdateProductSchema = z.object({
   name: z.string().min(1).optional(),
   category: z.enum(['Business Intelligence', 'Revenue Management', 'Distribution', 'Guest Experience', 'Operations', 'Connectivity', 'Booking Engine', 'Channel Management', 'Other']).optional(),
-  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).optional(),
-  description: z.string().nullish().transform(val => val ?? undefined),
-  version: z.string().nullish().transform(val => val ?? undefined),
-  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).nullish().transform(val => val ?? undefined),
-  website: z.string().nullish().transform(val => val ?? undefined),
-  contactIds: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-  targetMarket: z.string().nullish().transform(val => val ?? undefined),
-  pricing: z.string().nullish().transform(val => val ?? undefined),
-  notes: z.string().nullish().transform(val => val ?? undefined),
+  subcategory: z.enum(['Rate Shopping Tools', 'Competitive Intelligence', 'Market Analytics', 'Demand Forecasting', 'Pricing Optimization', 'Reservation Systems', 'Property Management', 'Guest Communication', 'Loyalty Programs', 'API Integration', 'Data Connectivity', 'Other']).nullish(),
+  description: z.string().nullish(),
+  version: z.string().nullish(),
+  status: z.enum(['Active', 'Deprecated', 'Development', 'Beta']).nullish(),
+  website: z.string().nullish(),
+  contactIds: z.array(z.string()).nullish(),
+  tags: z.array(z.string()).nullish(),
+  targetMarket: z.string().nullish(),
+  pricing: z.string().nullish(),
+  notes: z.string().nullish(),
   ownerId: z.string().optional()
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const BulkUpdateProductsSchema = z.object({

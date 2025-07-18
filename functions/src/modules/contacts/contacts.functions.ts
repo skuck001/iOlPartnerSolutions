@@ -31,34 +31,53 @@ const CreateContactSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   accountId: z.string().min(1),
-  contactType: z.enum(['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other']).nullish().transform(val => val ?? undefined),
-  position: z.string().nullish().transform(val => val ?? undefined),
-  phone: z.string().nullish().transform(val => val ?? undefined),
-  department: z.string().nullish().transform(val => val ?? undefined),
-  linkedIn: z.string().nullish().transform(val => val ?? undefined),
-  timezone: z.string().nullish().transform(val => val ?? undefined),
-  preferredContactMethod: z.enum(['Email', 'Phone', 'LinkedIn', 'Teams']).nullish().transform(val => val ?? undefined),
+  contactType: z.enum(['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other']).nullish(),
+  position: z.string().nullish(),
+  phone: z.string().nullish(),
+  department: z.string().nullish(),
+  linkedIn: z.string().nullish(),
+  timezone: z.string().nullish(),
+  preferredContactMethod: z.enum(['Email', 'Phone', 'LinkedIn', 'Teams']).nullish(),
   isDecisionMaker: z.boolean().optional(),
   lastContactDate: z.any().optional(), // Timestamp
-  notes: z.string().nullish().transform(val => val ?? undefined),
-  productIds: z.array(z.string()).optional()
+  notes: z.string().nullish(),
+  productIds: z.array(z.string()).optional(),
+  ownerId: z.string().min(1)
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const UpdateContactSchema = z.object({
   name: z.string().min(1).optional(),
   email: z.string().email().optional(),
   contactType: z.enum(['Primary', 'Secondary', 'Technical', 'Billing', 'Decision Maker', 'Other']).optional(),
-  position: z.string().nullish().transform(val => val ?? undefined),
-  phone: z.string().nullish().transform(val => val ?? undefined),
-  department: z.string().nullish().transform(val => val ?? undefined),
-  linkedIn: z.string().nullish().transform(val => val ?? undefined),
-  timezone: z.string().nullish().transform(val => val ?? undefined),
-  preferredContactMethod: z.enum(['Email', 'Phone', 'LinkedIn', 'Teams']).nullish().transform(val => val ?? undefined),
+  position: z.string().nullish(),
+  phone: z.string().nullish(),
+  department: z.string().nullish(),
+  linkedIn: z.string().nullish(),
+  timezone: z.string().nullish(),
+  preferredContactMethod: z.enum(['Email', 'Phone', 'LinkedIn', 'Teams']).nullish(),
   isDecisionMaker: z.boolean().optional(),
   lastContactDate: z.any().optional(), // Timestamp
-  notes: z.string().nullish().transform(val => val ?? undefined),
+  notes: z.string().nullish(),
   productIds: z.array(z.string()).optional(),
   ownerId: z.string().optional()
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const BulkUpdateContactsSchema = z.object({

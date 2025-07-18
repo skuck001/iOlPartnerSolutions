@@ -30,13 +30,22 @@ const TasksQuerySchema = z.object({
 
 const CreateTaskSchema = z.object({
   title: z.string().min(1),
-  opportunityId: z.string().nullish().transform(val => val ?? undefined),
+  opportunityId: z.string().nullish(),
   assignedTo: z.string().min(1),
   ownerId: z.string().min(1),
   dueDate: z.any(), // Timestamp
   status: z.enum(['To do', 'In progress', 'Done']).default('To do'),
-  bucket: z.string().nullish().transform(val => val ?? undefined),
-  description: z.string().nullish().transform(val => val ?? undefined)
+  bucket: z.string().nullish(),
+  description: z.string().nullish()
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const UpdateTaskSchema = z.object({
@@ -48,6 +57,15 @@ const UpdateTaskSchema = z.object({
   status: z.enum(['To do', 'In progress', 'Done']).optional(),
   bucket: z.string().optional(),
   description: z.string().optional()
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const ActivityFiltersSchema = z.object({

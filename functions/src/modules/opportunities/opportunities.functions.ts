@@ -36,42 +36,61 @@ const CreateOpportunitySchema = z.object({
   title: z.string().min(1),
   accountId: z.string().min(1),
   stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']),
-  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).nullish().transform(val => val ?? undefined),
-  summary: z.string().nullish().transform(val => val ?? undefined),
-  description: z.string().nullish().transform(val => val ?? undefined),
-  estimatedDealValue: z.number().nullish().transform(val => val ?? undefined),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).nullish(),
+  summary: z.string().nullish(),
+  description: z.string().nullish(),
+  estimatedDealValue: z.number().nullish(),
   probability: z.number().min(0).max(100).optional(),
   expectedCloseDate: z.any().optional(), // Timestamp
   lastActivityDate: z.any().optional(), // Timestamp
-  productId: z.string().nullish().transform(val => val ?? undefined),
+  productId: z.string().nullish(),
   contactIds: z.array(z.string()),
-  notes: z.string().nullish().transform(val => val ?? undefined),
+  notes: z.string().nullish(),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
   tags: z.array(z.string()).optional(),
   checklist: z.array(z.any()).optional(),
-  blockers: z.array(z.any()).optional()
+  blockers: z.array(z.any()).optional(),
+  ownerId: z.string().min(1)
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const UpdateOpportunitySchema = z.object({
   title: z.string().min(1).optional(),
   stage: z.enum(['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed-Won', 'Closed-Lost']).optional(),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
-  summary: z.string().nullish().transform(val => val ?? undefined),
-  description: z.string().nullish().transform(val => val ?? undefined),
-  estimatedDealValue: z.number().nullish().transform(val => val ?? undefined),
+  summary: z.string().nullish(),
+  description: z.string().nullish(),
+  estimatedDealValue: z.number().nullish(),
   probability: z.number().min(0).max(100).optional(),
   expectedCloseDate: z.any().optional(), // Timestamp
   lastActivityDate: z.any().optional(), // Timestamp
-  productId: z.string().nullish().transform(val => val ?? undefined),
+  productId: z.string().nullish(),
   contactIds: z.array(z.string()).optional(),
-  notes: z.string().nullish().transform(val => val ?? undefined),
+  notes: z.string().nullish(),
   activities: z.array(z.any()).optional(),
   documents: z.array(z.any()).optional(),
   tags: z.array(z.string()).optional(),
   checklist: z.array(z.any()).optional(),
   blockers: z.array(z.any()).optional(),
   ownerId: z.string().optional()
+}).transform(data => {
+  // Remove null, undefined, and empty string values to prevent Firestore errors
+  const cleanData: any = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      cleanData[key] = value;
+    }
+  });
+  return cleanData;
 });
 
 const BulkUpdateOpportunitiesSchema = z.object({
