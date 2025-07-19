@@ -300,6 +300,21 @@ export const Contacts: React.FC = () => {
     .map(accountId => accounts.find(a => a.id === accountId))
     .filter(Boolean) as Account[];
 
+  // Group contacts by account in alphabetical order
+  const groupedContacts = filteredAndSortedContacts.reduce((groups, contact) => {
+    const account = getAccount(contact.accountId);
+    const accountName = account?.name || 'Unknown Account';
+    
+    if (!groups[accountName]) {
+      groups[accountName] = [];
+    }
+    groups[accountName].push(contact);
+    return groups;
+  }, {} as Record<string, typeof filteredAndSortedContacts>);
+
+  // Sort account names alphabetically
+  const sortedAccountNames = Object.keys(groupedContacts).sort();
+
   const handleExportToExcel = () => {
     try {
       if (filteredAndSortedContacts.length === 0) {
@@ -392,7 +407,7 @@ export const Contacts: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Contacts</h1>
             <p className="text-sm text-gray-600 mt-1">
-              {filteredAndSortedContacts.length} of {contacts?.length || 0} contacts
+              {filteredAndSortedContacts.length} of {contacts?.length || 0} contacts across {sortedAccountNames.length} companies
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -550,243 +565,262 @@ export const Contacts: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredAndSortedContacts.map((contact) => {
-                    const account = getAccount(contact.accountId);
-                    const contactProducts = getProductsForContact(contact);
-                    const contactOpportunities = getOpportunitiesForContact(contact);
-                    const activeOpportunities = getActiveOpportunitiesCount(contact);
-                    const isOverdue = isContactOverdue(contact);
-                    
-                    return (
-                      <tr
-                        key={contact.id}
-                        onClick={() => handleRowClick(contact)}
-                        className="hover:bg-gray-50 cursor-pointer transition-colors"
-                      >
-                        {/* Contact Name */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1.5 mr-3" />
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {contact.name}
-                              </div>
-                              {contact.isDecisionMaker && (
-                                <div className="flex items-center gap-1 mt-1">
-                                  <CheckCircle className="h-3 w-3 text-green-500" />
-                                  <span className="text-xs text-green-700 font-medium">Decision Maker</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Email & Phone */}
-                        <td className="px-6 py-4">
-                          <div className="space-y-2">
+                  {sortedAccountNames.map(accountName => (
+                    <React.Fragment key={accountName}>
+                      {/* Company Group Header */}
+                      <tr className="bg-gray-50">
+                        <td colSpan={10} className="px-6 py-4">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center">
-                              <Mail className="h-4 w-4 text-gray-400 mr-2" />
-                              <a 
-                                href={`mailto:${contact.email}`}
-                                className="text-sm text-blue-600 hover:text-blue-800 truncate"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {contact.email}
-                              </a>
-                            </div>
-                            {contact.phone && (
-                              <div className="flex items-center">
-                                <Phone className="h-4 w-4 text-gray-400 mr-2" />
-                                <a 
-                                  href={`tel:${contact.phone}`}
-                                  className="text-sm text-gray-900"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {contact.phone}
-                                </a>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Position & Department */}
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              {contact.position || 'Not specified'}
-                            </div>
-                            {contact.department && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                {contact.department}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Contact Type */}
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getContactTypeColor(contact.contactType)}`}>
-                            {contact.contactType}
-                          </span>
-                        </td>
-
-                        {/* Account */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-start">
-                            <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {account?.name || 'Unknown Account'}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {account?.region}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Products */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            <Package className="h-4 w-4 text-gray-400 mr-2" />
-                            <span className="text-sm text-gray-900 font-medium">
-                              {contactProducts.length}
-                            </span>
-                            {contactProducts.length > 0 && (
-                              <div className="ml-2 text-xs text-gray-500 truncate max-w-24">
-                                {contactProducts[0].name}
-                                {contactProducts.length > 1 && ` +${contactProducts.length - 1}`}
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Opportunities */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <div className="flex items-center">
-                              <Activity className="h-4 w-4 text-blue-500 mr-1" />
-                              <span className="text-sm text-gray-900 font-medium">
-                                {contactOpportunities.length}
+                              <Building2 className="h-5 w-5 text-gray-600 mr-2" />
+                              <h3 className="text-lg font-semibold text-gray-900">{accountName}</h3>
+                              <span className="ml-2 text-sm text-gray-500">
+                                ({groupedContacts[accountName].length} contact{groupedContacts[accountName].length !== 1 ? 's' : ''})
                               </span>
                             </div>
-                            {activeOpportunities > 0 && (
-                              <div className="flex items-center">
-                                <Clock className="h-3 w-3 text-green-500 mr-1" />
-                                <span className="text-xs text-green-600">
-                                  {activeOpportunities} active
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Last Contact */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            {(() => {
-                              const recentActivity = getMostRecentActivity(contact);
-                              const ActivityIcon = recentActivity ? getActivityIcon(recentActivity.activityType) : Calendar;
-                              
-                              // Use completed activity date or fallback to lastContactDate
-                              const displayDate = recentActivity ? 
-                                (recentActivity.completedAt ? toDate(recentActivity.completedAt) : toDate(recentActivity.dateTime)) : 
-                                contact.lastContactDate ? toDate(contact.lastContactDate) : null;
-                              
-                              if (displayDate) {
-                                return (
-                                  <>
-                                    <ActivityIcon className={`h-4 w-4 mr-2 ${
-                                      isOverdue ? 'text-red-500' : 'text-gray-400'
-                                    }`} />
-                                    <div>
-                                      <div className={`text-sm ${
-                                        isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'
-                                      }`}>
-                                        {formatDistanceToNow(displayDate, { addSuffix: true })}
-                                      </div>
-                                      <div className="text-xs text-gray-500">
-                                        {format(displayDate, 'MMM d, yyyy')}
-                                      </div>
-                                      {recentActivity && (
-                                        <div className="flex items-center gap-1 text-xs text-gray-600">
-                                          <span className="capitalize">{recentActivity.activityType}</span>
-                                          <CheckCircle className="h-3 w-3 text-green-500" />
-                                          <span className="text-green-600">Completed</span>
-                                        </div>
-                                      )}
-                                      {!recentActivity && isOverdue && (
-                                        <div className="flex items-center gap-1 text-xs text-red-600">
-                                          <AlertTriangle className="h-3 w-3" />
-                                          Overdue
-                                        </div>
-                                      )}
-                                    </div>
-                                  </>
-                                );
-                              } else {
-                                return (
-                                  <div className="flex items-center">
-                                    <Activity className="h-4 w-4 mr-2 text-gray-300" />
-                                    <span className="text-sm text-gray-500">No contact recorded</span>
-                                  </div>
-                                );
-                              }
-                            })()}
-                          </div>
-                        </td>
-
-                        {/* Contact Methods */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center space-x-2">
-                            {contact.preferredContactMethod && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
-                                {contact.preferredContactMethod}
-                              </span>
-                            )}
-                            {contact.linkedIn && (
-                              <a 
-                                href={contact.linkedIn}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-1 text-blue-600 hover:text-blue-800"
-                                onClick={(e) => e.stopPropagation()}
-                                title="LinkedIn Profile"
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end space-x-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/contacts/${contact.id}`);
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/contacts/${contact.id}`);
-                              }}
-                              className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
-                              title="Edit Contact"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
                           </div>
                         </td>
                       </tr>
-                    );
-                  })}
+                      {/* Company Contacts */}
+                      {groupedContacts[accountName].map((contact) => {
+                        const account = getAccount(contact.accountId);
+                        const contactProducts = getProductsForContact(contact);
+                        const contactOpportunities = getOpportunitiesForContact(contact);
+                        const activeOpportunities = getActiveOpportunitiesCount(contact);
+                        const isOverdue = isContactOverdue(contact);
+                        
+                        return (
+                          <tr
+                            key={contact.id}
+                            onClick={() => handleRowClick(contact)}
+                            className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          >
+                            {/* Contact Name */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <User className="h-8 w-8 text-gray-400 bg-gray-100 rounded-full p-1.5 mr-3" />
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {contact.name}
+                                  </div>
+                                  {contact.isDecisionMaker && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <CheckCircle className="h-3 w-3 text-green-500" />
+                                      <span className="text-xs text-green-700 font-medium">Decision Maker</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Email & Phone */}
+                            <td className="px-6 py-4">
+                              <div className="space-y-2">
+                                <div className="flex items-center">
+                                  <Mail className="h-4 w-4 text-gray-400 mr-2" />
+                                  <a 
+                                    href={`mailto:${contact.email}`}
+                                    className="text-sm text-blue-600 hover:text-blue-800 truncate"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {contact.email}
+                                  </a>
+                                </div>
+                                {contact.phone && (
+                                  <div className="flex items-center">
+                                    <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                                    <a 
+                                      href={`tel:${contact.phone}`}
+                                      className="text-sm text-gray-900"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {contact.phone}
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Position & Department */}
+                            <td className="px-6 py-4">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {contact.position || 'Not specified'}
+                                </div>
+                                {contact.department && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {contact.department}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Contact Type */}
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getContactTypeColor(contact.contactType)}`}>
+                                {contact.contactType}
+                              </span>
+                            </td>
+
+                            {/* Account */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-start">
+                                <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {account?.name || 'Unknown Account'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {account?.region}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Products */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                <Package className="h-4 w-4 text-gray-400 mr-2" />
+                                <span className="text-sm text-gray-900 font-medium">
+                                  {contactProducts.length}
+                                </span>
+                                {contactProducts.length > 0 && (
+                                  <div className="ml-2 text-xs text-gray-500 truncate max-w-24">
+                                    {contactProducts[0].name}
+                                    {contactProducts.length > 1 && ` +${contactProducts.length - 1}`}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Opportunities */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-3">
+                                <div className="flex items-center">
+                                  <Activity className="h-4 w-4 text-blue-500 mr-1" />
+                                  <span className="text-sm text-gray-900 font-medium">
+                                    {contactOpportunities.length}
+                                  </span>
+                                </div>
+                                {activeOpportunities > 0 && (
+                                  <div className="flex items-center">
+                                    <Clock className="h-3 w-3 text-green-500 mr-1" />
+                                    <span className="text-xs text-green-600">
+                                      {activeOpportunities} active
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Last Contact */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center">
+                                {(() => {
+                                  const recentActivity = getMostRecentActivity(contact);
+                                  const ActivityIcon = recentActivity ? getActivityIcon(recentActivity.activityType) : Calendar;
+                                  
+                                  // Use completed activity date or fallback to lastContactDate
+                                  const displayDate = recentActivity ? 
+                                    (recentActivity.completedAt ? toDate(recentActivity.completedAt) : toDate(recentActivity.dateTime)) : 
+                                    contact.lastContactDate ? toDate(contact.lastContactDate) : null;
+                                  
+                                  if (displayDate) {
+                                    return (
+                                      <>
+                                        <ActivityIcon className={`h-4 w-4 mr-2 ${
+                                          isOverdue ? 'text-red-500' : 'text-gray-400'
+                                        }`} />
+                                        <div>
+                                          <div className={`text-sm ${
+                                            isOverdue ? 'text-red-600 font-medium' : 'text-gray-900'
+                                          }`}>
+                                            {formatDistanceToNow(displayDate, { addSuffix: true })}
+                                          </div>
+                                          <div className="text-xs text-gray-500">
+                                            {format(displayDate, 'MMM d, yyyy')}
+                                          </div>
+                                          {recentActivity && (
+                                            <div className="flex items-center gap-1 text-xs text-gray-600">
+                                              <span className="capitalize">{recentActivity.activityType}</span>
+                                              <CheckCircle className="h-3 w-3 text-green-500" />
+                                              <span className="text-green-600">Completed</span>
+                                            </div>
+                                          )}
+                                          {!recentActivity && isOverdue && (
+                                            <div className="flex items-center gap-1 text-xs text-red-600">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              Overdue
+                                            </div>
+                                          )}
+                                        </div>
+                                      </>
+                                    );
+                                  } else {
+                                    return (
+                                      <div className="flex items-center">
+                                        <Activity className="h-4 w-4 mr-2 text-gray-300" />
+                                        <span className="text-sm text-gray-500">No contact recorded</span>
+                                      </div>
+                                    );
+                                  }
+                                })()}
+                              </div>
+                            </td>
+
+                            {/* Contact Methods */}
+                            <td className="px-6 py-4">
+                              <div className="flex items-center space-x-2">
+                                {contact.preferredContactMethod && (
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">
+                                    {contact.preferredContactMethod}
+                                  </span>
+                                )}
+                                {contact.linkedIn && (
+                                  <a 
+                                    href={contact.linkedIn}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1 text-blue-600 hover:text-blue-800"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title="LinkedIn Profile"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/contacts/${contact.id}`);
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                  title="View Details"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/contacts/${contact.id}`);
+                                  }}
+                                  className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
+                                  title="Edit Contact"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>
