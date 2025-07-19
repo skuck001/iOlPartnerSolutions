@@ -158,10 +158,23 @@ export const Contacts: React.FC = () => {
     opportunities.forEach(opportunity => {
       if (opportunity.activities) {
         opportunity.activities.forEach(activity => {
-          // Only consider completed activities for "last contact"
-          if (activity.relatedContactIds.includes(contact.id || '') && activity.status === 'Completed') {
-            const activityDate = activity.completedAt ? toDate(activity.completedAt) : toDate(activity.dateTime);
-            if (!mostRecentDate || activityDate > mostRecentDate) {
+          // Check if this contact is involved in the activity
+          if (activity.relatedContactIds.includes(contact.id || '')) {
+            let activityDate: Date | null = null;
+            
+            // For completed activities, use completedAt if available, otherwise use dateTime
+            if (activity.status === 'Completed') {
+              activityDate = activity.completedAt ? toDate(activity.completedAt) : toDate(activity.dateTime);
+            } else if (activity.status === 'Scheduled') {
+              // For scheduled activities, only consider them if they're in the past
+              const scheduledDate = toDate(activity.dateTime);
+              if (scheduledDate < new Date()) {
+                activityDate = scheduledDate;
+              }
+            }
+            
+            // Only update if we have a valid date and it's more recent than current most recent
+            if (activityDate && (!mostRecentDate || activityDate > mostRecentDate)) {
               mostRecentDate = activityDate;
               mostRecentActivity = {
                 ...activity,
@@ -725,7 +738,7 @@ export const Contacts: React.FC = () => {
                                     (recentActivity.completedAt ? toDate(recentActivity.completedAt) : toDate(recentActivity.dateTime)) : 
                                     contact.lastContactDate ? toDate(contact.lastContactDate) : null;
                                   
-                                  if (displayDate) {
+                                  if (displayDate && displayDate <= new Date()) {
                                     return (
                                       <>
                                         <ActivityIcon className={`h-4 w-4 mr-2 ${
@@ -743,11 +756,21 @@ export const Contacts: React.FC = () => {
                                           {recentActivity && (
                                             <div className="flex items-center gap-1 text-xs text-gray-600">
                                               <span className="capitalize">{recentActivity.activityType}</span>
-                                              <CheckCircle className="h-3 w-3 text-green-500" />
-                                              <span className="text-green-600">Completed</span>
+                                              {recentActivity.status === 'Completed' && (
+                                                <>
+                                                  <CheckCircle className="h-3 w-3 text-green-500" />
+                                                  <span className="text-green-600">Completed</span>
+                                                </>
+                                              )}
+                                              {recentActivity.status === 'Scheduled' && (
+                                                <>
+                                                  <Clock className="h-3 w-3 text-blue-500" />
+                                                  <span className="text-blue-600">Scheduled</span>
+                                                </>
+                                              )}
                                             </div>
                                           )}
-                                          {!recentActivity && isOverdue && (
+                                          {isOverdue && (
                                             <div className="flex items-center gap-1 text-xs text-red-600">
                                               <AlertTriangle className="h-3 w-3" />
                                               Overdue
