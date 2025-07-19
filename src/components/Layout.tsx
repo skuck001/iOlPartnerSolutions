@@ -80,12 +80,24 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     fetchUserProfile();
   }, [currentUser]);
 
+  // Handle case where user becomes unauthenticated while on a protected page
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
   const handleLogout = async () => {
     try {
+      setShowUserMenu(false);
       await logout();
-      navigate('/login');
+      // The logout will trigger onAuthStateChanged which will set currentUser to null
+      // and the ProtectedRoute will automatically redirect to /login
+      // No need to manually navigate here as the auth state change will handle it
     } catch (error) {
       console.error('Failed to log out:', error);
+      // Even if logout fails, try to redirect to login
+      navigate('/login');
     }
   };
 

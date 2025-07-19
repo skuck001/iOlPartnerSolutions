@@ -326,6 +326,15 @@ const Assignments: React.FC = () => {
   const next7Days = getNext7Days();
   const groupedAssignments = groupAssignmentsByDate();
 
+  // Show loading spinner while fetching data
+  if (pageLoading || loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
@@ -740,7 +749,7 @@ const Assignments: React.FC = () => {
           </div>
         ) : (
           // List View - Original table
-          <div className="bg-white shadow-sm rounded-lg mx-6 mb-6 overflow-hidden border border-gray-200">
+          <div className="bg-white shadow-sm rounded-lg mx-6 mb-6 overflow-hidden border border-gray-200 mt-6">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">

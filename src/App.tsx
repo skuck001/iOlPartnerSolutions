@@ -23,14 +23,37 @@ import { UserProfile } from './pages/UserProfile';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser } = useAuth();
-  return currentUser ? <Layout>{children}</Layout> : <Navigate to="/login" />;
+  const { currentUser, loading } = useAuth();
+  
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+  
+  // Redirect to login if not authenticated
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Render protected content if authenticated
+  return <Layout>{children}</Layout>;
 };
 
 function AppRoutes() {
+  const { currentUser, loading } = useAuth();
+  
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      <Route path="/login" element={
+        // Redirect to dashboard if already logged in
+        currentUser && !loading ? <Navigate to="/" replace /> : <Login />
+      } />
+      
+      {/* Protected Routes */}
       <Route path="/" element={
         <ProtectedRoute>
           <Dashboard />
@@ -137,7 +160,11 @@ function AppRoutes() {
           <AssignmentDetails />
         </ProtectedRoute>
       } />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      
+      {/* Catch-all route - redirect to login if not authenticated, otherwise to dashboard */}
+      <Route path="*" element={
+        currentUser && !loading ? <Navigate to="/" replace /> : <Navigate to="/login" replace />
+      } />
     </Routes>
   );
 }
