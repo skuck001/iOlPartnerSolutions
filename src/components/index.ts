@@ -4,4 +4,5 @@ export { TaskBoard } from './TaskBoard';
 export { OwnerSelect } from './OwnerSelect';
 export { QuickAccess } from './QuickAccess';
 export { ActivityManager } from './ActivityManager';
-export { AISummary } from './AISummary'; 
+export { AISummary } from './AISummary'; export { CSVUpload } from './CSVUpload';
+export { default as BatchManager } from './BatchManager';

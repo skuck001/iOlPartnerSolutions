@@ -12,7 +12,8 @@ import {
   TrendingUp,
   ClipboardList,
   Settings,
-  FileCheck
+  FileCheck,
+  Network
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
@@ -31,6 +32,7 @@ const navigationItems = [
   { name: 'Contacts', href: '/contacts', icon: Users },
   { name: 'Opportunities', href: '/opportunities', icon: Target },
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
+  { name: 'Partner Map', href: '/partner-map', icon: Network },
   { name: 'Assignments', href: '/assignments', icon: FileCheck },
 ];
 
