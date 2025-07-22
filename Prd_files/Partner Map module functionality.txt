@@ -1,0 +1,72 @@
+?? App Module Specification
+Module Name: Node Intake & Mapping Engine
+Part of: Travel Tech Node Registry
+Author: IOL Product & Partnerships Team
+Version: 1.0
+Status: Draft
+
+?? 1. Purpose
+This module supports the import, standardization, deduplication, and mapping of newly discovered travel technology systems (nodes) into the master registry. It enables IOL to continuously ingest large volumes of scraped or manually gathered data, sanitize and review it, resolve duplicates, and consolidate all variants under a master profile.
+
+?? 2. Functional Components
+A. Batch Upload & Staging
+Goal: Allow ingestion of new node data via a standardized .csv template into a staging table.
+* ? Accepts .csv with a predefined column format
+* ? Assigns a batch_id to every import for traceability and rollback
+* ? Basic field validation (e.g., node_category must match enum)
+Required CSV Fields:
+ColumnTypeNotesnode_namestringRaw scraped namewebsitestringRequired for deduplicationentity_namestringScraped or inferrednode_categoryenumMust match system enumdirectionenumMust match system enumnotesstringScraped or parsed remarksconnect_targetsstring[]Optionalprotocols_supportedstring[]Optionaldata_types_supportedstring[]Optional
+B. Sanitization Pipeline
+Goal: Normalize raw data for further processing.
+Steps:
+1. Trim whitespace, lower-case and unify formats
+2. Apply text cleaning to names (e.g., remove "Ltd.", ".com", "Inc.", etc.)
+3. Use regex or logic to extract structured tags from notes (e.g., "PMS", "over 400 hotels", "connected to Expedia")
+4. Auto-fill known mappings where possible
+
+C. Deduplication & Identity Resolution
+Goal: Identify likely duplicate records using fuzzy logic + domain name clustering.
+Matching Logic:
+* ? Match by normalized website domain
+* ? Fuzzy match node_name and entity_name (e.g., “Cloudbeds CM” vs “Cloudbeds Channel Manager”)
+* ? Assign a confidence score for matches
+UI View:
+* A "Duplicates Review Table" with side-by-side comparisons:
+o Approve as same ? assign to existing master_entity_id
+o Keep separate
+o Merge & edit manually
+
+D. Master Mapping & Alias Handling
+Goal: Consolidate similar nodes under a unified profile with alias tracking.
+Fields added to master tables:
+FieldDescriptionmaster_entity_nameCanonical name (e.g., “Cloudbeds”)alternate_namesArray of variations: ["CloudBeds", "cloudbeds.com", "Cloud Beds Ltd."]master_websitePrimary reference URLnode_aliasesAll known variants of node_nameThe alias list supports:
+* Improved auto-matching in future batches
+* Better display consistency
+* External API/graph query normalization
+
+E. Merge & Insert Workflow
+Once staging entries are reviewed:
+* ? Insert into master node table with reference to batch_id
+* ? Log timestamp, user, and source
+* ? Prevents duplicates based on node_name + entity_name
+* ? Map new connects_to links if available
+* ? Tracks whether a record is merged, added new, or rejected
+
+?? 3. System Tables Overview
+A. staging_nodes (temporary)
+FieldTypePurposeidUUIDInternalbatch_idstringGroup identifier...All fields from uploaded CSVB. node_master
+FieldTypePurposenode_idstringUnique keyentity_idstringFK to entity_masternode_namestringCanonical namenode_aliasesstring[]All recognized variants...As per your PRDC. entity_master
+FieldTypeDescriptionentity_idstringUniquemaster_entity_namestringCanonical namealternate_namesstring[]AliaseswebsitestringMaster domainD. batch_log
+FieldTypeDescriptionbatch_idstringImport identifiercreated_bystringUser who uploadedstatusstringpending, processed, error, etc.error_reportjsonIf validation failed
+?? 4. Admin UI Features
+* ?? Upload View: Upload .csv, preview sanitized version, assign batch_id
+* ?? Duplicate Review View: Show fuzzy matches, resolve or merge
+* ?? Merge Control Panel: Map aliases, confirm canonical entity/node
+* ?? Batch Tracker: See historical uploads, rollback button
+* ?? Alias Manager: Search/edit alternate names
+
+?? 5. Non-Functional Requirements
+* All actions must be logged and reversible
+* Fuzzy matching algorithm should be tunable (thresholds, whitelist domains)
+* System must scale to thousands of nodes and growing
+

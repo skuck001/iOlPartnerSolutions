@@ -1,17 +1,10 @@
 import { onCall } from 'firebase-functions/v2/https';
-import { setGlobalOptions } from 'firebase-functions';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { validateData, accountSchemas, commonSchemas } from '../../shared/validation.middleware';
 import { withErrorHandling } from '../../shared/errors';
 import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { AccountsService } from './accounts.service';
 import { z } from 'zod';
-
-// Set global options for all functions
-setGlobalOptions({
-  maxInstances: 10,
-  region: 'us-central1',
-});
 
 /**
  * Get accounts with filtering and pagination

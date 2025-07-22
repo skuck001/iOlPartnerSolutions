@@ -1,0 +1,28 @@
+entity_name,node_name,node_category,direction,connects_to,protocols_supported,data_types_supported,is_active,notes
+Cloudbeds,Cloudbeds PMS,PMS,Supply,"cloudbeds-cm,expedia-api",PushAPI|PullAPI,Availability|Rates|Restrictions|Bookings,true,Leading cloud-based property management system for hospitality
+Cloudbeds,Cloudbeds CM,CM,Supply,"booking-com,expedia-api,airbnb-api",PushAPI,Availability|Rates|Restrictions,true,Channel manager connecting to major OTAs
+SynXis,SynXis CRS,CRS,Supply,"sabre-gds,amadeus-gds",PushAPI|PullAPI,Availability|Rates|Bookings|Content,true,Central reservation system by Sabre
+Booking.com,Booking.com API,OTA,Demand,"cloudbeds-cm,synxis-crs,pms-direct",PullAPI|LiveSearch,Availability|Rates|Bookings,true,World's largest online accommodation platform
+Expedia,Expedia Partner API,OTA,Demand,"cloudbeds-cm,rms-system",PullAPI,Availability|Rates|Bookings|Content,true,Major OTA with comprehensive travel services
+RateGain,RateGain RMS,RMS,Supply,"cloudbeds-pms,booking-engine",PushAPI,Rates|Analytics,true,Revenue management and rate intelligence
+D-Edge,D-Edge CRS,CRS,Supply,"booking-engine,ota-connections",PushAPI|PullAPI,Availability|Rates|Content,true,European hospitality technology provider
+Amadeus,Amadeus GDS,Switch,None,"hotel-systems,travel-agencies",PushAPI|PullAPI,Availability|Rates|Bookings|Content,true,Global distribution system for travel
+Sabre,Sabre GDS,Switch,None,"hotel-systems,travel-agencies",PushAPI|PullAPI,Availability|Rates|Bookings|Content,true,Leading GDS platform for hospitality
+TripAdvisor,TripAdvisor Connect,Meta,Demand,"hotel-systems",PullAPI,Content|Analytics,true,Metasearch and review platform
+Google,Google Hotel Ads,Meta,Demand,"hotel-booking-engines",LiveSearch,Availability|Rates,true,Google's hotel metasearch platform
+Airbnb,Airbnb API,OTA,Demand,"property-managers",PullAPI,Availability|Bookings,true,Short-term rental marketplace
+MEWS,MEWS PMS,PMS,Supply,"channel-managers,payment-gw",PushAPI|PullAPI,Availability|Rates|Bookings|Analytics,true,Modern cloud PMS for hospitality
+RoomRaccoon,RoomRaccoon PMS,PMS,Supply,"booking-engine,cm-tools",PushAPI,Availability|Rates|Bookings,true,All-in-one hotel management platform
+SiteMinder,SiteMinder CM,CM,Supply,"global-otas,gds-systems",PushAPI,Availability|Rates|Restrictions,true,Hotel commerce platform and channel manager
+Stripe,Stripe Payments,PaymentGateway,None,"booking-engines,pms-systems",PushAPI|PullAPI,PaymentDetails,true,Online payment processing platform
+HotelRunner,HotelRunner System,BookingEngine,Supply,"pms-integration",PushAPI,Bookings|PaymentDetails,true,Direct booking engine for hotels
+Revinate,Revinate CRM,CMS,Supply,"pms-data-feed",PullAPI,Content|Analytics,true,Guest experience and marketing platform
+TravelClick,TravelClick Media,Enrichment,Supply,"hotel-websites",PushAPI,Content|Analytics,false,Digital marketing solutions - legacy system
+Kayak,Kayak Metasearch,Meta,Demand,"hotel-suppliers",LiveSearch,Availability|Rates,true,Travel metasearch engine
+Priceline,Priceline API,OTA,Demand,"hotel-suppliers",PullAPI,Availability|Rates|Bookings,true,Online travel agency with opaque pricing
+Agoda,Agoda Partner API,OTA,Demand,"asian-hotels",PullAPI,Availability|Rates|Bookings,true,Leading OTA in Asia-Pacific region
+Oracle,Oracle OPERA PMS,PMS,Supply,"hospitality-systems",PushAPI|PullAPI,Availability|Rates|Bookings|Analytics,true,Enterprise hospitality management system
+Protel,Protel PMS,PMS,Supply,"european-cms",PushAPI,Availability|Rates|Bookings,true,European hotel management software
+TrustYou,TrustYou Analytics,Enrichment,Supply,"review-platforms",PullAPI,Content|Analytics,true,Guest feedback and reputation management
+Rentals United,Rentals United API,Aggregator,Supply,"vacation-rentals",PushAPI|PullAPI,Availability|Rates|Content,true,Vacation rental distribution platform
+AvailPro,AvailPro CM,CM,Supply,"multiple-otas",PushAPI,Availability|Rates|Restrictions,true,Channel management for vacation rentals 

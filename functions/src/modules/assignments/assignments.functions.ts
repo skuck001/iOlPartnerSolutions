@@ -1,5 +1,4 @@
 import { onCall } from 'firebase-functions/v2/https';
-import { setGlobalOptions } from 'firebase-functions';
 import { authenticateUser } from '../../shared/auth.middleware';
 import { validateData } from '../../shared/validation.middleware';
 import { withErrorHandling } from '../../shared/errors';
@@ -7,11 +6,6 @@ import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { AssignmentService } from './assignments.service';
 import { z } from 'zod';
 import { HttpsError } from 'firebase-functions/v2/https';
-
-setGlobalOptions({
-  maxInstances: 10,
-  region: 'us-central1',
-});
 
 const assignmentService = new AssignmentService();
 

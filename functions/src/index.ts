@@ -118,3 +118,26 @@ export {
   batchLoadDashboardData,
   getRecentItems
 } from './modules/dashboard/dashboard.functions';
+
+// Nodes Module
+export { 
+  createEntity, 
+  getEntities, 
+  getEntity, 
+  updateEntity, 
+  deleteEntity,
+  createNode,
+  getNodes,
+  getNode,
+  updateNode,
+  deleteNode,
+  searchNodes,
+  createBatch,
+  processBatchCSV,
+  getStagingNodes,
+  analyzeDeduplication,
+  processDeduplicationDecisions,
+  getBatchLogs,
+  updateBatchStatus,
+  rollbackBatch
+} from './modules/nodes/nodes.functions';

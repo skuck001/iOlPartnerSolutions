@@ -20,6 +20,7 @@ import Assignments from './pages/Assignments';
 import AssignmentDetails from './pages/AssignmentDetails';
 
 import { UserProfile } from './pages/UserProfile';
+import PartnerMap from './pages/PartnerMap';
 
 // Protected Route wrapper
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -69,6 +70,7 @@ function AppRoutes() {
           <WeeklyReport />
         </ProtectedRoute>
       } />
+      <Route path="/partner-map" element={<PartnerMap />} />
 
       <Route path="/accounts" element={
         <ProtectedRoute>
