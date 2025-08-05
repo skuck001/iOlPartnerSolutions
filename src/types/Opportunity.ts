@@ -39,6 +39,7 @@ export interface ChecklistItem {
   id: string;
   text: string;
   completed: boolean;
+  dueDate?: Date; // Add due date support to match Assignments
   createdAt: Timestamp;
   completedAt?: Timestamp;
 }
@@ -76,6 +77,10 @@ export interface Opportunity {
   // Timeline fields
   expectedCloseDate?: Timestamp;
   lastActivityDate?: Timestamp;
+  
+  // File management fields (to match Assignments)
+  oneDriveLink?: string;
+  oneDriveTitle?: string;
   
   // AI Summary fields
   aiSummary?: string;

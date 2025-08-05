@@ -110,7 +110,12 @@ export {
   removeChecklistItem,
   addProgressLogEntry,
   updateProgressLogEntry,
-  removeProgressLogEntry
+  removeProgressLogEntry,
+  // Activity management functions
+  addActivityToAssignment,
+  updateActivityInAssignment,
+  removeActivityFromAssignment,
+  getActivitiesByAssignment
 } from './modules/assignments/assignments.functions';
 
 // Export dashboard batch functions

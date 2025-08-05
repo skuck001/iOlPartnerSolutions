@@ -34,7 +34,11 @@ import {
   Activity,
   TrendingUp,
   DollarSign,
-  FileText
+  FileText,
+  FileSpreadsheet,
+  Presentation,
+  Image,
+  File
 } from 'lucide-react';
 import type { 
   Opportunity, 
@@ -143,6 +147,8 @@ export const OpportunityDetails: React.FC = () => {
     potentialVolume: 0,
     estimatedDealValue: 0,
     expectedCloseDate: null as Date | null,
+    oneDriveLink: '',
+    oneDriveTitle: '',
     ownerId: currentUser?.uid || ''
   });
 
@@ -152,10 +158,16 @@ export const OpportunityDetails: React.FC = () => {
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [activitiesDisplayCount, setActivitiesDisplayCount] = useState(5); // For pagination
   const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [newChecklistDueDate, setNewChecklistDueDate] = useState('');
   const [showCompletedChecklist, setShowCompletedChecklist] = useState(false);
   const [newBlockerItem, setNewBlockerItem] = useState('');
+  const [newBlockerDueDate, setNewBlockerDueDate] = useState('');
   const [showCompletedBlockers, setShowCompletedBlockers] = useState(false);
   const [showSuggestedContacts, setShowSuggestedContacts] = useState(false);
+  // File management state
+  const [isEditingLink, setIsEditingLink] = useState(false);
+  // Inline due date editing state
+  const [editingDueDate, setEditingDueDate] = useState<string | null>(null);
   const [activityForm, setActivityForm] = useState({
     activityType: 'Meeting' as 'Meeting' | 'Email' | 'Call' | 'WhatsApp' | 'Demo' | 'Workshop',
     dateTime: new Date(),
@@ -450,6 +462,8 @@ export const OpportunityDetails: React.FC = () => {
             potentialVolume: opportunityTyped.potentialVolume || 0,
             estimatedDealValue: opportunityTyped.estimatedDealValue || 0,
             expectedCloseDate: opportunityTyped.expectedCloseDate ? safeDateConversion(opportunityTyped.expectedCloseDate) : null,
+            oneDriveLink: opportunityTyped.oneDriveLink || '',
+            oneDriveTitle: opportunityTyped.oneDriveTitle || '',
             ownerId: opportunityTyped.ownerId || currentUser?.uid || ''
           });
         }
@@ -516,6 +530,8 @@ export const OpportunityDetails: React.FC = () => {
         commercialModel: formData.commercialModel || '',
         potentialVolume: formData.potentialVolume,
         estimatedDealValue: formData.estimatedDealValue,
+        oneDriveLink: formData.oneDriveLink || '',
+        oneDriveTitle: formData.oneDriveTitle || '',
         ownerId: formData.ownerId,
         // Legacy fields for backward compatibility
         contactsInvolved: formData.contactIds, // Map contactIds to legacy field
@@ -647,9 +663,9 @@ export const OpportunityDetails: React.FC = () => {
     if (newChecklistItem.trim()) {
       const newItem = {
         id: Date.now().toString(),
-        title: newChecklistItem.trim(),
         text: newChecklistItem.trim(),
         completed: false,
+        dueDate: newChecklistDueDate ? new Date(newChecklistDueDate) : undefined,
         createdAt: Timestamp.now(),
       };
       setFormData({
@@ -657,6 +673,7 @@ export const OpportunityDetails: React.FC = () => {
         checklist: [...formData.checklist, newItem]
       });
       setNewChecklistItem('');
+      setNewChecklistDueDate('');
     }
   };
 
@@ -680,9 +697,9 @@ export const OpportunityDetails: React.FC = () => {
     if (newBlockerItem.trim()) {
       const newItem = {
         id: Date.now().toString(),
-        title: newBlockerItem.trim(),
         text: newBlockerItem.trim(),
         completed: false,
+        dueDate: newBlockerDueDate ? new Date(newBlockerDueDate) : undefined,
         createdAt: Timestamp.now(),
       };
       setFormData({
@@ -690,6 +707,7 @@ export const OpportunityDetails: React.FC = () => {
         blockers: [...formData.blockers, newItem]
       });
       setNewBlockerItem('');
+      setNewBlockerDueDate('');
     }
   };
 
@@ -773,6 +791,143 @@ export const OpportunityDetails: React.FC = () => {
     };
   };
 
+  // File management utility functions (from Assignments)
+  const getDocumentTypeAndIcon = (link: string) => {
+    if (!link) return { type: 'unknown', icon: FileText };
+    
+    const lowerLink = link.toLowerCase();
+    
+    // OneDrive URL patterns - check for file type indicators in URL
+    if (lowerLink.includes('/:x:/') || lowerLink.includes('/:x:')) {
+      return { type: 'excel', icon: FileSpreadsheet };
+    }
+    if (lowerLink.includes('/:p:/') || lowerLink.includes('/:p:')) {
+      return { type: 'powerpoint', icon: Presentation };
+    }
+    if (lowerLink.includes('/:w:/') || lowerLink.includes('/:w:')) {
+      return { type: 'word', icon: FileText };
+    }
+    if (lowerLink.includes('/:t:/') || lowerLink.includes('/:t:')) {
+      return { type: 'text', icon: FileText };
+    }
+    if (lowerLink.includes('/:i:/') || lowerLink.includes('/:i:')) {
+      return { type: 'image', icon: Image };
+    }
+    if (lowerLink.includes('/:v:/') || lowerLink.includes('/:v:')) {
+      return { type: 'video', icon: Video };
+    }
+    
+    // Fallback to file extension detection
+    if (lowerLink.includes('.xlsx') || lowerLink.includes('.xls')) {
+      return { type: 'excel', icon: FileSpreadsheet };
+    }
+    if (lowerLink.includes('.pptx') || lowerLink.includes('.ppt')) {
+      return { type: 'powerpoint', icon: Presentation };
+    }
+    if (lowerLink.includes('.docx') || lowerLink.includes('.doc')) {
+      return { type: 'word', icon: FileText };
+    }
+    if (lowerLink.includes('.pdf')) {
+      return { type: 'pdf', icon: FileText };
+    }
+    if (lowerLink.includes('.jpg') || lowerLink.includes('.jpeg') || 
+        lowerLink.includes('.png') || lowerLink.includes('.gif') || 
+        lowerLink.includes('.bmp') || lowerLink.includes('.svg')) {
+      return { type: 'image', icon: Image };
+    }
+    if (lowerLink.includes('.mp4') || lowerLink.includes('.avi') || 
+        lowerLink.includes('.mov') || lowerLink.includes('.wmv')) {
+      return { type: 'video', icon: Video };
+    }
+    if (lowerLink.includes('.txt') || lowerLink.includes('.rtf')) {
+      return { type: 'text', icon: FileText };
+    }
+    
+    return { type: 'file', icon: File };
+  };
+
+  const getDocumentColor = (type: string) => {
+    switch (type) {
+      case 'excel':
+        return 'bg-green-100 text-green-600';
+      case 'powerpoint':
+        return 'bg-orange-100 text-orange-600';
+      case 'word':
+        return 'bg-blue-100 text-blue-600';
+      case 'pdf':
+        return 'bg-red-100 text-red-600';
+      case 'image':
+        return 'bg-purple-100 text-purple-600';
+      case 'video':
+        return 'bg-indigo-100 text-indigo-600';
+      case 'text':
+        return 'bg-gray-100 text-gray-600';
+      default:
+        return 'bg-blue-100 text-blue-600';
+    }
+  };
+
+  const handleLinkRemove = () => {
+    setFormData({ ...formData, oneDriveLink: '', oneDriveTitle: '' });
+  };
+
+  // Inline due date editing helpers
+  const handleQuickDueDate = (itemId: string, type: 'today' | 'tomorrow' | 'next-week', isBlocker = false) => {
+    const today = new Date();
+    let dueDate: Date;
+    
+    switch (type) {
+      case 'today':
+        dueDate = today;
+        break;
+      case 'tomorrow':
+        dueDate = new Date(today);
+        dueDate.setDate(today.getDate() + 1);
+        break;
+      case 'next-week':
+        dueDate = new Date(today);
+        dueDate.setDate(today.getDate() + 7);
+        break;
+    }
+
+    if (isBlocker) {
+      setFormData({
+        ...formData,
+        blockers: formData.blockers.map(item =>
+          item.id === itemId ? { ...item, dueDate } : item
+        )
+      });
+    } else {
+      setFormData({
+        ...formData,
+        checklist: formData.checklist.map(item =>
+          item.id === itemId ? { ...item, dueDate } : item
+        )
+      });
+    }
+  };
+
+  const handleInlineDueDateEdit = (itemId: string, dateStr: string, isBlocker = false) => {
+    const dueDate = dateStr ? new Date(dateStr) : undefined;
+    
+    if (isBlocker) {
+      setFormData({
+        ...formData,
+        blockers: formData.blockers.map(item =>
+          item.id === itemId ? { ...item, dueDate } : item
+        )
+      });
+    } else {
+      setFormData({
+        ...formData,
+        checklist: formData.checklist.map(item =>
+          item.id === itemId ? { ...item, dueDate } : item
+        )
+      });
+    }
+    setEditingDueDate(null);
+  };
+
   // Excel export function
   const exportOpportunityToExcel = () => {
     if (!opportunity) return;
@@ -791,6 +946,7 @@ export const OpportunityDetails: React.FC = () => {
       'Executive Summary': localAiSummary || opportunity.aiSummary || '',
       'Notes': formData.notes,
       'Tags': formData.tags.join(', '),
+      'OneDrive Link': formData.oneDriveLink || '',
       'Created Date': opportunity.createdAt ? format(safeDateConversion(opportunity.createdAt), 'yyyy-MM-dd') : '',
       'Last Updated': opportunity.updatedAt ? format(safeDateConversion(opportunity.updatedAt), 'yyyy-MM-dd') : '',
       'Last Activity Date': last ? format(safeDateConversion(last.dateTime), 'yyyy-MM-dd HH:mm') : '',
@@ -1907,22 +2063,31 @@ export const OpportunityDetails: React.FC = () => {
                   </div>
 
                   {/* Add new checklist item */}
-                  <div className="flex gap-1.5 mb-3">
-                    <input
-                      type="text"
-                      value={newChecklistItem}
-                      onChange={(e) => setNewChecklistItem(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddChecklistItem())}
-                      className="flex-1 text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Add checklist item..."
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddChecklistItem}
-                      className="px-2 py-1.5 text-gray-400 hover:text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
+                  <div className="space-y-2 mb-3">
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={newChecklistItem}
+                        onChange={(e) => setNewChecklistItem(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAddChecklistItem())}
+                        className="flex-1 text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="Add checklist item..."
+                      />
+                      <input
+                        type="date"
+                        value={newChecklistDueDate}
+                        onChange={(e) => setNewChecklistDueDate(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        title="Due date (optional)"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddChecklistItem}
+                        className="px-2 py-1.5 text-gray-400 hover:text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Pending checklist items */}
@@ -1940,17 +2105,91 @@ export const OpportunityDetails: React.FC = () => {
                           </button>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-900 break-words">{item.text}</p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Added {(() => {
-                              try {
-                                const date = safeDateConversion(item.createdAt);
-                                return format(date, 'MMM d, yyyy');
-                              } catch (error) {
-                                console.error('Date formatting error:', error, item.createdAt);
-                                return 'N/A';
-                              }
-                            })()}
-                            </p>
+                            <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                              <p>
+                                Added {(() => {
+                                try {
+                                  const date = safeDateConversion(item.createdAt);
+                                  return format(date, 'MMM d, yyyy');
+                                } catch (error) {
+                                  console.error('Date formatting error:', error, item.createdAt);
+                                  return 'N/A';
+                                }
+                              })()}
+                              </p>
+                              {/* Due date with inline editing */}
+                              {editingDueDate === item.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="date"
+                                    defaultValue={item.dueDate ? format(new Date(item.dueDate), 'yyyy-MM-dd') : ''}
+                                    onBlur={(e) => handleInlineDueDateEdit(item.id, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleInlineDueDateEdit(item.id, e.currentTarget.value);
+                                      } else if (e.key === 'Escape') {
+                                        setEditingDueDate(null);
+                                      }
+                                    }}
+                                    className="text-xs border border-blue-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleInlineDueDateEdit(item.id, '')}
+                                    className="text-xs text-red-500 hover:text-red-700"
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : item.dueDate ? (
+                                <div className="group relative">
+                                  <div 
+                                    className={`flex items-center gap-1 cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 transition-colors ${
+                                      new Date(item.dueDate) < new Date() ? 'text-red-600 font-medium' : 'text-blue-600'
+                                    }`}
+                                    onClick={() => setEditingDueDate(item.id)}
+                                    title="Click to edit due date"
+                                  >
+                                    <Calendar className="h-3 w-3" />
+                                    <span>Due {format(new Date(item.dueDate), 'MMM d, yyyy')}</span>
+                                    {new Date(item.dueDate) < new Date() && ' (Overdue)'}
+                                  </div>
+                                  
+                                  {/* Quick action buttons on hover */}
+                                  <div className="absolute left-full ml-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-1 bg-white shadow-lg border rounded-lg p-1">
+                                      <button
+                                        onClick={() => handleQuickDueDate(item.id, 'today')}
+                                        className="text-xs px-2 py-1 hover:bg-blue-50 rounded whitespace-nowrap"
+                                      >
+                                        Today
+                                      </button>
+                                      <button
+                                        onClick={() => handleQuickDueDate(item.id, 'tomorrow')}
+                                        className="text-xs px-2 py-1 hover:bg-blue-50 rounded whitespace-nowrap"
+                                      >
+                                        Tomorrow
+                                      </button>
+                                      <button
+                                        onClick={() => handleQuickDueDate(item.id, 'next-week')}
+                                        className="text-xs px-2 py-1 hover:bg-blue-50 rounded whitespace-nowrap"
+                                      >
+                                        Next Week
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setEditingDueDate(item.id)}
+                                  className="text-xs text-gray-400 hover:text-blue-600 flex items-center gap-1 px-1 py-0.5 hover:bg-blue-50 rounded transition-colors"
+                                >
+                                  <Calendar className="h-3 w-3" />
+                                  Add due date
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -1982,17 +2221,25 @@ export const OpportunityDetails: React.FC = () => {
                               </button>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-700 line-through break-words">{item.text}</p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  Completed {item.completedAt ? (() => {
-                              try {
-                                const date = safeDateConversion(item.completedAt);
-                                return format(date, 'MMM d, yyyy');
-                              } catch (error) {
-                                console.error('Date formatting error:', error, item.completedAt);
-                                return 'N/A';
-                              }
-                            })() : 'recently'}
-                                </p>
+                                <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                                  <p>
+                                    Completed {item.completedAt ? (() => {
+                                    try {
+                                      const date = safeDateConversion(item.completedAt);
+                                      return format(date, 'MMM d, yyyy');
+                                    } catch (error) {
+                                      console.error('Date formatting error:', error, item.completedAt);
+                                      return 'N/A';
+                                    }
+                                  })() : 'recently'}
+                                  </p>
+                                  {item.dueDate && (
+                                    <p className="flex items-center gap-1 text-gray-400">
+                                      <Calendar className="h-3 w-3" />
+                                      Was due {format(new Date(item.dueDate), 'MMM d, yyyy')}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
                               <button
                                 type="button"
@@ -2038,22 +2285,31 @@ export const OpportunityDetails: React.FC = () => {
                   </div>
 
                   {/* Add new blocker item */}
-                  <div className="flex gap-1.5 mb-3">
-                    <input
-                      type="text"
-                      value={newBlockerItem}
-                      onChange={(e) => setNewBlockerItem(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddBlockerItem())}
-                      className="flex-1 text-sm border border-red-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                      placeholder="Add blocker or issue..."
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddBlockerItem}
-                      className="px-2 py-1.5 text-red-500 hover:text-red-600 border border-red-300 rounded-md hover:bg-red-50"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
+                  <div className="space-y-2 mb-3">
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={newBlockerItem}
+                        onChange={(e) => setNewBlockerItem(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleAddBlockerItem())}
+                        className="flex-1 text-sm border border-red-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        placeholder="Add blocker or issue..."
+                      />
+                      <input
+                        type="date"
+                        value={newBlockerDueDate}
+                        onChange={(e) => setNewBlockerDueDate(e.target.value)}
+                        className="text-sm border border-red-300 rounded-md px-2.5 py-1.5 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        title="Resolution target date (optional)"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddBlockerItem}
+                        className="px-2 py-1.5 text-red-500 hover:text-red-600 border border-red-300 rounded-md hover:bg-red-50"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Active blockers */}
@@ -2071,17 +2327,91 @@ export const OpportunityDetails: React.FC = () => {
                           </button>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-red-900 break-words font-medium">{item.text}</p>
-                            <p className="text-xs text-red-700 mt-1">
-                              Added {(() => {
-                              try {
-                                const date = safeDateConversion(item.createdAt);
-                                return format(date, 'MMM d, yyyy');
-                              } catch (error) {
-                                console.error('Date formatting error:', error, item.createdAt);
-                                return 'N/A';
-                              }
-                            })()}
-                            </p>
+                            <div className="text-xs text-red-700 mt-1 space-y-0.5">
+                              <p>
+                                Added {(() => {
+                                try {
+                                  const date = safeDateConversion(item.createdAt);
+                                  return format(date, 'MMM d, yyyy');
+                                } catch (error) {
+                                  console.error('Date formatting error:', error, item.createdAt);
+                                  return 'N/A';
+                                }
+                              })()}
+                              </p>
+                              {/* Due date with inline editing */}
+                              {editingDueDate === item.id ? (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="date"
+                                    defaultValue={item.dueDate ? format(new Date(item.dueDate), 'yyyy-MM-dd') : ''}
+                                    onBlur={(e) => handleInlineDueDateEdit(item.id, e.target.value, true)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleInlineDueDateEdit(item.id, e.currentTarget.value, true);
+                                      } else if (e.key === 'Escape') {
+                                        setEditingDueDate(null);
+                                      }
+                                    }}
+                                    className="text-xs border border-red-300 rounded px-2 py-1 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    autoFocus
+                                  />
+                                  <button
+                                    onClick={() => handleInlineDueDateEdit(item.id, '', true)}
+                                    className="text-xs text-red-500 hover:text-red-700"
+                                    title="Cancel"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : item.dueDate ? (
+                                <div className="group relative">
+                                  <div 
+                                    className={`flex items-center gap-1 cursor-pointer hover:bg-red-50 rounded px-1 py-0.5 transition-colors ${
+                                      new Date(item.dueDate) < new Date() ? 'text-red-800 font-bold' : 'text-red-600'
+                                    }`}
+                                    onClick={() => setEditingDueDate(item.id)}
+                                    title="Click to edit target date"
+                                  >
+                                    <Calendar className="h-3 w-3" />
+                                    <span>Target resolution: {format(new Date(item.dueDate), 'MMM d, yyyy')}</span>
+                                    {new Date(item.dueDate) < new Date() && ' (Overdue)'}
+                                  </div>
+                                  
+                                  {/* Quick action buttons on hover */}
+                                  <div className="absolute left-full ml-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-1 bg-white shadow-lg border rounded-lg p-1">
+                                      <button
+                                        onClick={() => handleQuickDueDate(item.id, 'today', true)}
+                                        className="text-xs px-2 py-1 hover:bg-red-50 rounded whitespace-nowrap"
+                                      >
+                                        Today
+                                      </button>
+                                      <button
+                                        onClick={() => handleQuickDueDate(item.id, 'tomorrow', true)}
+                                        className="text-xs px-2 py-1 hover:bg-red-50 rounded whitespace-nowrap"
+                                      >
+                                        Tomorrow
+                                      </button>
+                                      <button
+                                        onClick={() => handleQuickDueDate(item.id, 'next-week', true)}
+                                        className="text-xs px-2 py-1 hover:bg-red-50 rounded whitespace-nowrap"
+                                      >
+                                        Next Week
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setEditingDueDate(item.id)}
+                                  className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1 px-1 py-0.5 hover:bg-red-50 rounded transition-colors"
+                                >
+                                  <Calendar className="h-3 w-3" />
+                                  Add target date
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -2113,17 +2443,25 @@ export const OpportunityDetails: React.FC = () => {
                               </button>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm text-gray-700 line-through break-words">{item.text}</p>
-                                <p className="text-xs text-gray-400 mt-1">
-                                  Resolved {item.completedAt ? (() => {
-                              try {
-                                const date = safeDateConversion(item.completedAt);
-                                return format(date, 'MMM d, yyyy');
-                              } catch (error) {
-                                console.error('Date formatting error:', error, item.completedAt);
-                                return 'N/A';
-                              }
-                            })() : 'recently'}
-                                </p>
+                                <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                                  <p>
+                                    Resolved {item.completedAt ? (() => {
+                                    try {
+                                      const date = safeDateConversion(item.completedAt);
+                                      return format(date, 'MMM d, yyyy');
+                                    } catch (error) {
+                                      console.error('Date formatting error:', error, item.completedAt);
+                                      return 'N/A';
+                                    }
+                                  })() : 'recently'}
+                                  </p>
+                                  {item.dueDate && (
+                                    <p className="flex items-center gap-1 text-gray-400">
+                                      <Calendar className="h-3 w-3" />
+                                      Target was: {format(new Date(item.dueDate), 'MMM d, yyyy')}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
                               <button
                                 type="button"
@@ -2146,6 +2484,116 @@ export const OpportunityDetails: React.FC = () => {
                       <p className="text-xs text-gray-400">Track issues that may prevent progress</p>
                     </div>
                   )}
+                </div>
+
+                {/* Files Card */}
+                <div className="bg-white shadow rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-gray-500" />
+                      <h2 className="text-base font-medium text-gray-900">Files</h2>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">OneDrive links and shared documents</p>
+                  <div className="space-y-3">
+                    {formData.oneDriveLink && !isEditingLink ? (
+                      <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        {(() => {
+                          const { type, icon: IconComponent } = getDocumentTypeAndIcon(formData.oneDriveLink);
+                          const colorClass = getDocumentColor(type);
+                          return (
+                            <div className={`w-10 h-10 ${colorClass} rounded-lg flex items-center justify-center`}>
+                              <IconComponent className="h-5 w-5" />
+                            </div>
+                          );
+                        })()}
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900">
+                            {formData.oneDriveTitle || `${getDocumentTypeAndIcon(formData.oneDriveLink).type.charAt(0).toUpperCase() + 
+                             getDocumentTypeAndIcon(formData.oneDriveLink).type.slice(1)} Document`}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {getDocumentTypeAndIcon(formData.oneDriveLink).type.charAt(0).toUpperCase() + 
+                             getDocumentTypeAndIcon(formData.oneDriveLink).type.slice(1)} • OneDrive
+                          </p>
+                        </div>
+                        <a 
+                          href={formData.oneDriveLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Open in OneDrive"
+                        >
+                          <FileText className="h-4 w-4" />
+                        </a>
+                        <button 
+                          type="button"
+                          onClick={() => setIsEditingLink(true)} 
+                          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={handleLinkRemove} 
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-200 rounded-lg transition-colors"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : isEditingLink ? (
+                      <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">File Title</label>
+                          <input
+                            type="text"
+                            className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            placeholder="Enter a descriptive title for this file..."
+                            value={formData.oneDriveTitle}
+                            onChange={(e) => setFormData({ ...formData, oneDriveTitle: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">OneDrive Link</label>
+                          <input
+                            type="url"
+                            className="w-full text-sm border border-gray-300 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            placeholder="Paste OneDrive link..."
+                            value={formData.oneDriveLink}
+                            onChange={(e) => setFormData({ ...formData, oneDriveLink: e.target.value })}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            type="button"
+                            onClick={() => setIsEditingLink(false)} 
+                            className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium rounded-lg"
+                          >
+                            Cancel
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setIsEditingLink(false)} 
+                            className="px-3 py-2 text-sm bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-400">
+                        <FileText className="h-8 w-8 mx-auto mb-2" />
+                        <p className="text-sm">No files linked yet</p>
+                        <button 
+                          type="button"
+                          onClick={() => setIsEditingLink(true)} 
+                          className="mt-2 text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded"
+                        >
+                          + Add OneDrive Link
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

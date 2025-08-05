@@ -3,7 +3,7 @@ import { AuditService } from '../../shared/audit.service';
 
 export interface ChecklistItem {
   id: string;
-  label: string;
+  text: string; // Changed from 'label' to 'text' to match frontend
   completed: boolean;
   dueDate?: Date;
   completedAt?: Timestamp;
@@ -16,6 +16,32 @@ export interface ProgressLogEntry {
   message: string;
 }
 
+// Activity status for assignments
+export type AssignmentActivityStatus = 'Scheduled' | 'Completed' | 'Cancelled';
+
+// Activity interface for assignments (similar to Opportunities)
+export interface AssignmentActivity {
+  id: string;
+  activityType: 'Meeting' | 'Email' | 'Call' | 'WhatsApp' | 'Demo' | 'Workshop' | 'Review' | 'Update';
+  dateTime: Timestamp;
+  relatedContactIds?: string[]; // Optional for assignments
+  method: 'In-person' | 'Zoom' | 'Phone' | 'Teams' | 'Email' | 'Document' | 'Other';
+  subject: string;
+  notes: string;
+  assignedTo: string; // Assignment owner or assigned user ID
+  attachments?: string[]; // file URLs or references
+  followUpNeeded: boolean;
+  status: AssignmentActivityStatus;
+  completedAt?: Timestamp;
+  followUpDate?: Timestamp;
+  followUpSubject?: string;
+  priority?: 'High' | 'Medium' | 'Low';
+  createdAt: Timestamp;
+  createdBy: string;
+  updatedAt?: Timestamp;
+  updatedBy?: string;
+}
+
 export interface Assignment {
   taskId: string;
   title: string;
@@ -24,8 +50,11 @@ export interface Assignment {
   dueDate?: Date;
   ownerId: string;
   oneDriveLink?: string;
+  oneDriveTitle?: string;
   checklist: ChecklistItem[];
-  progressLog: ProgressLogEntry[];
+  progressLog: ProgressLogEntry[]; // Keep for backward compatibility
+  activities: AssignmentActivity[]; // New activity tracking (similar to Opportunities)
+  lastActivityDate?: Timestamp; // Track when last activity was added
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -45,7 +74,8 @@ export class AssignmentService {
       status: data.status || 'todo',
       ownerId: data.ownerId || userId,
       checklist: data.checklist || [],
-      progressLog: data.progressLog || [],
+      progressLog: data.progressLog || [], // Keep for backward compatibility
+      activities: [], // Initialize new activity tracking
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),
     };
@@ -59,6 +89,9 @@ export class AssignmentService {
     }
     if (data.oneDriveLink) {
       assignmentData.oneDriveLink = data.oneDriveLink;
+    }
+    if (data.oneDriveTitle) {
+      assignmentData.oneDriveTitle = data.oneDriveTitle;
     }
 
     await docRef.set(assignmentData);
@@ -81,7 +114,16 @@ export class AssignmentService {
 
   async getAssignment(taskId: string): Promise<Assignment | null> {
     const doc = await this.collection.doc(taskId).get();
-    return doc.exists ? doc.data() as Assignment : null;
+    if (!doc.exists) return null;
+    
+    const assignment = doc.data() as Assignment;
+    
+    // Initialize activities array if it doesn't exist (backward compatibility)
+    if (!assignment.activities) {
+      assignment.activities = [];
+    }
+    
+    return assignment;
   }
 
   async updateAssignment(taskId: string, updateData: any, userId: string): Promise<Assignment> {
@@ -124,7 +166,14 @@ export class AssignmentService {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as Assignment);
+    return snapshot.docs.map(doc => {
+      const assignment = doc.data() as Assignment;
+      // Initialize activities array if it doesn't exist (backward compatibility)
+      if (!assignment.activities) {
+        assignment.activities = [];
+      }
+      return assignment;
+    });
   }
 
   async getAssignmentsByOwner(ownerId: string): Promise<Assignment[]> {
@@ -133,7 +182,14 @@ export class AssignmentService {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as Assignment);
+    return snapshot.docs.map(doc => {
+      const assignment = doc.data() as Assignment;
+      // Initialize activities array if it doesn't exist (backward compatibility)
+      if (!assignment.activities) {
+        assignment.activities = [];
+      }
+      return assignment;
+    });
   }
 
   async getAssignmentsByStatus(status: 'todo' | 'in_progress' | 'done'): Promise<Assignment[]> {
@@ -142,7 +198,14 @@ export class AssignmentService {
       .orderBy('createdAt', 'desc')
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as Assignment);
+    return snapshot.docs.map(doc => {
+      const assignment = doc.data() as Assignment;
+      // Initialize activities array if it doesn't exist (backward compatibility)
+      if (!assignment.activities) {
+        assignment.activities = [];
+      }
+      return assignment;
+    });
   }
 
   async addChecklistItem(taskId: string, checklistItem: Omit<ChecklistItem, 'id'>, userId: string): Promise<Assignment> {
@@ -155,7 +218,7 @@ export class AssignmentService {
 
     const newItem: any = {
       id: this.db.collection('temp').doc().id, // Generate unique ID
-      label: checklistItem.label,
+      text: checklistItem.text, // Changed from 'label' to 'text'
       completed: checklistItem.completed ?? false,
     };
 
@@ -178,7 +241,7 @@ export class AssignmentService {
       resourceId: taskId,
       data: {
         action: 'Checklist item added',
-        checklistItemLabel: newItem.label
+        checklistItemText: newItem.text // Changed from 'checklistItemLabel' to 'checklistItemText'
       }
     });
 
@@ -199,8 +262,8 @@ export class AssignmentService {
         const updatedItem = { ...item };
         
         // Update fields only if they have values
-        if (updateData.label !== undefined && updateData.label !== null) {
-          updatedItem.label = updateData.label;
+        if (updateData.text !== undefined && updateData.text !== null) {
+          updatedItem.text = updateData.text;
         }
         if (updateData.completed !== undefined && updateData.completed !== null) {
           updatedItem.completed = updateData.completed;
@@ -410,5 +473,143 @@ export class AssignmentService {
     });
 
     return results;
+  }
+
+  // ============================================================================
+  // ACTIVITY MANAGEMENT METHODS (similar to Opportunities)
+  // ============================================================================
+
+  async addActivityToAssignment(taskId: string, activityData: Omit<AssignmentActivity, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>, userId: string): Promise<AssignmentActivity> {
+    const docRef = this.collection.doc(taskId);
+    const assignmentDoc = await docRef.get();
+
+    if (!assignmentDoc.exists) {
+      throw new Error('Assignment not found');
+    }
+
+    const now = Timestamp.now();
+    const newActivity: AssignmentActivity = {
+      ...activityData,
+      id: `activity_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+      createdAt: now,
+      createdBy: userId,
+      updatedAt: now,
+      updatedBy: userId
+    };
+
+    const assignmentData = assignmentDoc.data();
+    const activities = (assignmentData?.activities || []) as AssignmentActivity[];
+    activities.push(newActivity);
+
+    await docRef.update({
+      activities,
+      lastActivityDate: now,
+      updatedAt: now
+    });
+
+    // Audit log
+    await AuditService.log({
+      userId,
+      action: 'create',
+      resourceType: 'assignment_activity',
+      resourceId: newActivity.id,
+      data: { 
+        taskId,
+        subject: newActivity.subject,
+        activityType: newActivity.activityType,
+        assignedTo: newActivity.assignedTo
+      }
+    });
+
+    return newActivity;
+  }
+
+  async updateActivityInAssignment(taskId: string, activityId: string, updateData: Partial<Omit<AssignmentActivity, 'id' | 'createdAt' | 'createdBy'>>, userId: string): Promise<AssignmentActivity> {
+    const docRef = this.collection.doc(taskId);
+    const assignmentDoc = await docRef.get();
+
+    if (!assignmentDoc.exists) {
+      throw new Error('Assignment not found');
+    }
+
+    const assignmentData = assignmentDoc.data();
+    const activities = (assignmentData?.activities || []) as AssignmentActivity[];
+    
+    const activityIndex = activities.findIndex(activity => activity.id === activityId);
+    if (activityIndex === -1) {
+      throw new Error('Activity not found');
+    }
+
+    const updatedActivity = {
+      ...activities[activityIndex],
+      ...updateData,
+      updatedAt: Timestamp.now(),
+      updatedBy: userId
+    };
+
+    activities[activityIndex] = updatedActivity;
+
+    await docRef.update({
+      activities,
+      updatedAt: Timestamp.now()
+    });
+
+    // Audit log
+    await AuditService.log({
+      userId,
+      action: 'update',
+      resourceType: 'assignment_activity',
+      resourceId: activityId,
+      data: { taskId, ...updateData }
+    });
+
+    return updatedActivity;
+  }
+
+  async deleteActivityFromAssignment(taskId: string, activityId: string, userId: string): Promise<void> {
+    const docRef = this.collection.doc(taskId);
+    const assignmentDoc = await docRef.get();
+
+    if (!assignmentDoc.exists) {
+      throw new Error('Assignment not found');
+    }
+
+    const assignmentData = assignmentDoc.data();
+    const activities = (assignmentData?.activities || []) as AssignmentActivity[];
+
+    const activityToDelete = activities.find(activity => activity.id === activityId);
+    if (!activityToDelete) {
+      throw new Error('Activity not found');
+    }
+
+    const updatedActivities = activities.filter(activity => activity.id !== activityId);
+
+    await docRef.update({
+      activities: updatedActivities,
+      updatedAt: Timestamp.now()
+    });
+
+    // Audit log
+    await AuditService.log({
+      userId,
+      action: 'delete',
+      resourceType: 'assignment_activity',
+      resourceId: activityId,
+      data: { 
+        taskId,
+        subject: activityToDelete.subject,
+        activityType: activityToDelete.activityType
+      }
+    });
+  }
+
+  async getActivitiesByAssignment(taskId: string): Promise<AssignmentActivity[]> {
+    const assignment = await this.getAssignment(taskId);
+    
+    if (!assignment) {
+      throw new Error('Assignment not found');
+    }
+
+    return assignment.activities || [];
   }
 } 

@@ -52,6 +52,8 @@ const CreateOpportunitySchema = z.object({
   tags: z.array(z.string()).optional(),
   checklist: z.array(z.any()).optional(),
   blockers: z.array(z.any()).optional(),
+  oneDriveLink: z.string().nullish(), // Added OneDrive file management support
+  oneDriveTitle: z.string().nullish(), // Added OneDrive file title support
   ownerId: z.string().min(1)
 }).transform(data => {
   // Remove null, undefined, and empty string values to prevent Firestore errors
@@ -83,6 +85,8 @@ const UpdateOpportunitySchema = z.object({
   tags: z.array(z.string()).optional(),
   checklist: z.array(z.any()).optional(),
   blockers: z.array(z.any()).optional(),
+  oneDriveLink: z.string().nullish(), // Added OneDrive file management support
+  oneDriveTitle: z.string().nullish(), // Added OneDrive file title support
   ownerId: z.string().optional()
 }).transform(data => {
   // Remove null, undefined, and empty string values to prevent Firestore errors

@@ -23,15 +23,34 @@ import {
   FileText as FileWord,
   Image,
   Video,
-  File
+  File,
+  MessageSquare,
+  Phone,
+  Mail,
+  MapPin,
+  CheckCircle2,
+  Circle,
+  MoreVertical,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Users
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAssignmentsApi } from '../hooks/useAssignmentsApi';
 import { useAuth } from '../hooks/useAuth';
 import { useUsersApi } from '../hooks/useUsersApi';
-import { ASSIGNMENT_STATUSES } from '../types/Assignment';
+import { 
+  ASSIGNMENT_STATUSES, 
+  ASSIGNMENT_ACTIVITY_TYPES, 
+  ASSIGNMENT_ACTIVITY_METHODS, 
+  ASSIGNMENT_ACTIVITY_PRIORITIES, 
+  ASSIGNMENT_ACTIVITY_STATUSES 
+} from '../types/Assignment';
 import type { Assignment, AssignmentStatus } from '../types';
+import type { AssignmentActivity, AssignmentActivityStatus } from '../types/Assignment';
 import { format, formatDistanceToNow, isAfter, isBefore, startOfDay, addDays, isToday, isTomorrow, isThisWeek, isPast, isSameDay } from 'date-fns';
+import { Timestamp } from 'firebase/firestore';
 
 type SortField = 'title' | 'status' | 'dueDate' | 'createdAt' | 'progress';
 type SortDirection = 'asc' | 'desc';
@@ -71,10 +90,16 @@ const Assignments: React.FC = () => {
     assignments, 
     getAssignments, 
     getAssignmentProgress,
+    createAssignment,
     updateAssignment,
     addChecklistItem,
     updateChecklistItem,
     removeChecklistItem,
+    // Activity management methods
+    addActivityToAssignment,
+    updateActivityInAssignment,
+    removeActivityFromAssignment,
+    getActivitiesByAssignment,
     loading, 
     error 
   } = useAssignmentsApi();
@@ -101,17 +126,48 @@ const Assignments: React.FC = () => {
   const [isEditingDueDate, setIsEditingDueDate] = useState(false);
 
   // --- Checklist editing state and handlers ---
-  const [editChecklist, setEditChecklist] = useState(selectedAssignment?.checklist || []);
+  const [editChecklist, setEditChecklist] = useState(() => {
+    if (selectedAssignment?.checklist) {
+      return selectedAssignment.checklist.map(item => ({
+        ...item,
+        text: item.text || (item as any).label || ''
+      }));
+    }
+    return [];
+  });
   const [newChecklistItem, setNewChecklistItem] = useState('');
+  const [newChecklistDueDate, setNewChecklistDueDate] = useState('');
 
   // --- OneDrive link editing state and handlers ---
   const [editOneDriveLink, setEditOneDriveLink] = useState(selectedAssignment?.oneDriveLink || '');
   const [editOneDriveTitle, setEditOneDriveTitle] = useState(selectedAssignment?.oneDriveTitle || '');
   const [isEditingLink, setIsEditingLink] = useState(false);
+  // Inline due date editing state
+  const [editingDueDate, setEditingDueDate] = useState<string | null>(null);
 
   // --- Save button state and handlers ---
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [editStatus, setEditStatus] = useState<AssignmentStatus>('todo');
+
+  // --- Activity management state ---
+  const [showActivityForm, setShowActivityForm] = useState(false);
+  const [editingActivity, setEditingActivity] = useState<AssignmentActivity | null>(null);
+  const [activitiesDisplayCount, setActivitiesDisplayCount] = useState(5);
+  const [activityFormData, setActivityFormData] = useState({
+    activityType: 'Update' as (typeof ASSIGNMENT_ACTIVITY_TYPES)[number],
+    dateTime: new Date(),
+    method: 'Document' as (typeof ASSIGNMENT_ACTIVITY_METHODS)[number],
+    subject: '',
+    notes: '',
+    assignedTo: currentUser?.uid || '',
+    relatedContactIds: [] as string[],
+    attachments: [] as string[],
+    followUpNeeded: false,
+    status: 'Scheduled' as AssignmentActivityStatus,
+    followUpDate: undefined as Date | undefined,
+    followUpSubject: '',
+    priority: 'Medium' as (typeof ASSIGNMENT_ACTIVITY_PRIORITIES)[number]
+  });
 
   // Update editTitle and editDescription when selectedAssignment changes
   useEffect(() => {
@@ -126,7 +182,16 @@ const Assignments: React.FC = () => {
 
   // Update editChecklist when selectedAssignment changes
   useEffect(() => {
-    setEditChecklist(selectedAssignment?.checklist || []);
+    if (selectedAssignment?.checklist) {
+      // Handle field name migration from 'label' to 'text'
+      const migratedChecklist = selectedAssignment.checklist.map(item => ({
+        ...item,
+        text: item.text || (item as any).label || ''
+      }));
+      setEditChecklist(migratedChecklist);
+    } else {
+      setEditChecklist([]);
+    }
   }, [selectedAssignment]);
 
   // Update editOneDriveLink when selectedAssignment changes
@@ -172,9 +237,21 @@ const Assignments: React.FC = () => {
   // Set first assignment as selected by default
   useEffect(() => {
     if (assignments && assignments.length > 0 && !selectedAssignment) {
-      setSelectedAssignment(assignments[0]);
+      const firstAssignment = assignments[0];
+      // Initialize activities array if it doesn't exist (backward compatibility)
+      if (!firstAssignment.activities) {
+        firstAssignment.activities = [];
+      }
+      setSelectedAssignment(firstAssignment);
     }
   }, [assignments, selectedAssignment]);
+
+  // Initialize activities array when selectedAssignment changes
+  useEffect(() => {
+    if (selectedAssignment && !selectedAssignment.activities) {
+      setSelectedAssignment(prev => prev ? { ...prev, activities: [] } : null);
+    }
+  }, [selectedAssignment]);
 
   const handleChecklistToggle = async (idx: number) => {
     if (selectedAssignment) {
@@ -198,13 +275,13 @@ const Assignments: React.FC = () => {
   const handleChecklistEdit = async (idx: number, value: string) => {
     if (selectedAssignment) {
       const item = editChecklist[idx];
-      const updated = editChecklist.map((item, i) => i === idx ? { ...item, label: value } : item);
+      const updated = editChecklist.map((item, i) => i === idx ? { ...item, text: value } : item);
       setEditChecklist(updated);
       try {
         await updateChecklistItem({
           taskId: selectedAssignment.taskId,
           itemId: item.id,
-          label: value
+          text: value
         });
       } catch (error) {
         console.error('Error updating checklist:', error);
@@ -234,21 +311,29 @@ const Assignments: React.FC = () => {
 
   const handleChecklistAdd = async () => {
     if (selectedAssignment && newChecklistItem.trim()) {
-      const tempItem = { id: Date.now().toString(), label: newChecklistItem, completed: false };
+      const tempItem = { 
+        id: Date.now().toString(), 
+        text: newChecklistItem, 
+        completed: false,
+        dueDate: newChecklistDueDate ? new Date(newChecklistDueDate) : undefined
+      };
       const updated = [...editChecklist, tempItem];
       setEditChecklist(updated);
       setNewChecklistItem('');
+      setNewChecklistDueDate('');
       try {
         await addChecklistItem({
           taskId: selectedAssignment.taskId,
-          label: newChecklistItem.trim(),
-          completed: false
+          text: newChecklistItem.trim(),
+          completed: false,
+          dueDate: newChecklistDueDate || undefined
         });
       } catch (error) {
         console.error('Error adding checklist item:', error);
         // Revert on error
         setEditChecklist(selectedAssignment.checklist);
         setNewChecklistItem(newChecklistItem);
+        setNewChecklistDueDate(newChecklistDueDate);
       }
     }
   };
@@ -256,6 +341,39 @@ const Assignments: React.FC = () => {
   const handleLinkRemove = () => {
     setEditOneDriveLink('');
     setEditOneDriveTitle('');
+  };
+
+  // Inline due date editing helpers
+  const handleQuickDueDate = (itemId: string, type: 'today' | 'tomorrow' | 'next-week') => {
+    const today = new Date();
+    let dueDate: Date;
+    
+    switch (type) {
+      case 'today':
+        dueDate = today;
+        break;
+      case 'tomorrow':
+        dueDate = new Date(today);
+        dueDate.setDate(today.getDate() + 1);
+        break;
+      case 'next-week':
+        dueDate = new Date(today);
+        dueDate.setDate(today.getDate() + 7);
+        break;
+    }
+
+    setEditChecklist(prev => prev.map(item =>
+      item.id === itemId ? { ...item, dueDate } : item
+    ));
+  };
+
+  const handleInlineDueDateEdit = (itemId: string, dateStr: string) => {
+    const dueDate = dateStr ? new Date(dateStr) : undefined;
+    
+    setEditChecklist(prev => prev.map(item =>
+      item.id === itemId ? { ...item, dueDate } : item
+    ));
+    setEditingDueDate(null);
   };
 
   const fetchAssignments = async () => {
@@ -279,33 +397,60 @@ const Assignments: React.FC = () => {
   const handleSaveAll = async () => {
     if (selectedAssignment) {
       try {
-        const updates: any = {};
+        // Check if this is a new assignment (taskId starts with 'new-')
+        const isNewAssignment = selectedAssignment.taskId.startsWith('new-');
         
-        if (editTitle !== selectedAssignment.title) {
-          updates.title = editTitle;
-        }
-        if (editDescription !== selectedAssignment.details) {
-          updates.details = editDescription;
-        }
-        if (editDueDate !== (selectedAssignment.dueDate ? format(toDate(selectedAssignment.dueDate), 'yyyy-MM-dd') : '')) {
-          updates.dueDate = editDueDate || undefined;
-        }
-        if (editOneDriveLink !== selectedAssignment.oneDriveLink) {
-          updates.oneDriveLink = editOneDriveLink || undefined;
-        }
-        if (editOneDriveTitle !== selectedAssignment.oneDriveTitle) {
-          updates.oneDriveTitle = editOneDriveTitle || undefined;
-        }
-        if (editStatus !== selectedAssignment.status) {
-          updates.status = editStatus;
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await updateAssignment({
-            taskId: selectedAssignment.taskId,
-            ...updates
+        if (isNewAssignment) {
+          // Create new assignment
+          const newAssignment = await createAssignment({
+            title: editTitle,
+            details: editDescription,
+            status: editStatus,
+            dueDate: editDueDate || undefined,
+            oneDriveLink: editOneDriveLink || undefined,
+            oneDriveTitle: editOneDriveTitle || undefined,
+            ownerId: currentUser?.uid || ''
           });
+          
+          // Update the selected assignment with the real data
+          setSelectedAssignment(newAssignment);
           setHasUnsavedChanges(false);
+          
+          // Refresh the assignments list
+          await getAssignments();
+        } else {
+          // Update existing assignment
+          const updates: any = {};
+          
+          if (editTitle !== selectedAssignment.title) {
+            updates.title = editTitle;
+          }
+          if (editDescription !== selectedAssignment.details) {
+            updates.details = editDescription;
+          }
+          if (editDueDate !== (selectedAssignment.dueDate ? format(toDate(selectedAssignment.dueDate), 'yyyy-MM-dd') : '')) {
+            updates.dueDate = editDueDate || undefined;
+          }
+          if (editOneDriveLink !== selectedAssignment.oneDriveLink) {
+            updates.oneDriveLink = editOneDriveLink || undefined;
+          }
+          if (editOneDriveTitle !== selectedAssignment.oneDriveTitle) {
+            updates.oneDriveTitle = editOneDriveTitle || undefined;
+          }
+          if (editStatus !== selectedAssignment.status) {
+            updates.status = editStatus;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await updateAssignment({
+              taskId: selectedAssignment.taskId,
+              ...updates
+            });
+            setHasUnsavedChanges(false);
+            
+            // Refresh the assignments list
+            await getAssignments();
+          }
         }
       } catch (error) {
         console.error('Error saving changes:', error);
@@ -323,11 +468,35 @@ const Assignments: React.FC = () => {
   };
 
   const handleRowClick = (assignment: Assignment) => {
+    // Initialize activities array if it doesn't exist (backward compatibility)
+    if (!assignment.activities) {
+      assignment.activities = [];
+    }
     setSelectedAssignment(assignment);
   };
 
   const handleAdd = () => {
-    navigate('/assignments/new');
+    // Create a new blank assignment and select it
+    const newAssignment: Assignment = {
+      taskId: 'new-' + Date.now(),
+      title: 'New Assignment',
+      details: '',
+      status: 'todo',
+      checklist: [],
+      progressLog: [],
+      activities: [],
+      ownerId: currentUser?.uid || '',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    };
+    setSelectedAssignment(newAssignment);
+    setEditTitle('New Assignment');
+    setEditDescription('');
+    setEditStatus('todo');
+    setEditDueDate('');
+    setEditOneDriveLink('');
+    setEditOneDriveTitle('');
+    setEditChecklist([]);
   };
 
   const getStatusColor = (status: AssignmentStatus) => {
@@ -602,6 +771,112 @@ const Assignments: React.FC = () => {
     setEditOneDriveLink(e.target.value);
   };
 
+  // ============================================================================
+  // ACTIVITY MANAGEMENT HELPER FUNCTIONS
+  // ============================================================================
+
+  const getActivityIcon = (activityType: string) => {
+    switch (activityType) {
+      case 'Meeting': return Calendar;
+      case 'Call': return Phone;
+      case 'Email': return Mail;
+      case 'WhatsApp': return MessageSquare;
+      case 'Demo': return Video;
+      case 'Workshop': return Users;
+      case 'Review': return CheckCircle2;
+      case 'Update': return Edit3;
+      default: return FileText;
+    }
+  };
+
+  const getActivityStatusColor = (status: AssignmentActivityStatus) => {
+    switch (status) {
+      case 'Scheduled': return 'bg-blue-100 text-blue-800';
+      case 'Completed': return 'bg-green-100 text-green-800';
+      case 'Cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getPriorityColor = (priority: 'High' | 'Medium' | 'Low') => {
+    switch (priority) {
+      case 'High': return 'bg-red-100 text-red-800';
+      case 'Medium': return 'bg-yellow-100 text-yellow-800';
+      case 'Low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleAddActivity = async () => {
+    if (!selectedAssignment || !activityFormData.subject.trim()) return;
+
+    try {
+      await addActivityToAssignment({
+        taskId: selectedAssignment.taskId,
+        ...activityFormData,
+        dateTime: activityFormData.dateTime.toISOString(),
+        followUpDate: activityFormData.followUpDate?.toISOString()
+      });
+
+      // Reset form and close
+      setActivityFormData({
+        activityType: 'Update' as (typeof ASSIGNMENT_ACTIVITY_TYPES)[number],
+        dateTime: new Date(),
+        method: 'Document' as (typeof ASSIGNMENT_ACTIVITY_METHODS)[number],
+        subject: '',
+        notes: '',
+        assignedTo: currentUser?.uid || '',
+        relatedContactIds: [],
+        attachments: [],
+        followUpNeeded: false,
+        status: 'Scheduled' as AssignmentActivityStatus,
+        followUpDate: undefined,
+        followUpSubject: '',
+        priority: 'Medium' as (typeof ASSIGNMENT_ACTIVITY_PRIORITIES)[number]
+      });
+      setShowActivityForm(false);
+
+      // Refresh assignments to get updated data
+      await getAssignments();
+    } catch (err) {
+      console.error('Failed to add activity:', err);
+    }
+  };
+
+  const handleCompleteActivity = async (activityId: string) => {
+    if (!selectedAssignment) return;
+
+    try {
+      await updateActivityInAssignment({
+        taskId: selectedAssignment.taskId,
+        activityId,
+        status: 'Completed',
+        completedAt: new Date().toISOString()
+      });
+
+      // Refresh assignments
+      await getAssignments();
+    } catch (err) {
+      console.error('Failed to complete activity:', err);
+    }
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!selectedAssignment) return;
+
+    try {
+      await removeActivityFromAssignment({
+        taskId: selectedAssignment.taskId,
+        activityId
+      });
+
+      // Refresh assignments
+      await getAssignments();
+    } catch (err) {
+      console.error('Failed to delete activity:', err);
+    }
+  };
+
   return (
     <div className="h-full flex bg-gray-50 overflow-hidden">
       {/* Left Panel - Assignment List */}
@@ -854,102 +1129,334 @@ const Assignments: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {editChecklist.map((item, index) => (
-                    <div key={item.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div key={item.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
                       <input
                         type="checkbox"
                         checked={item.completed}
                         onChange={() => handleChecklistToggle(index)}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                        className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
                       />
-                      <input
-                        className={`flex-1 bg-transparent border-b border-gray-200 focus:outline-none focus:border-primary-500 ${item.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}
-                        value={item.label}
-                        onChange={e => handleChecklistEdit(index, e.target.value)}
-                      />
+                      <div className="flex-1 min-w-0">
+                        <input
+                          className={`w-full bg-white border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-200 ${item.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}
+                          value={item.text || (item as any).label || ''}
+                          onChange={e => handleChecklistEdit(index, e.target.value)}
+                          placeholder="Enter checklist item..."
+                        />
+                        {/* Due date with inline editing */}
+                        {editingDueDate === item.id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="date"
+                              defaultValue={item.dueDate ? format(new Date(item.dueDate), 'yyyy-MM-dd') : ''}
+                              onBlur={(e) => handleInlineDueDateEdit(item.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleInlineDueDateEdit(item.id, e.currentTarget.value);
+                                } else if (e.key === 'Escape') {
+                                  setEditingDueDate(null);
+                                }
+                              }}
+                              className="text-xs border border-blue-300 rounded px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleInlineDueDateEdit(item.id, '')}
+                              className="text-xs text-red-500 hover:text-red-700"
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : item.dueDate ? (
+                          <div className="group relative">
+                            <div 
+                              className={`text-xs mt-1 flex items-center gap-1 cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 transition-colors ${
+                                new Date(item.dueDate) < new Date() && !item.completed ? 'text-red-600 font-medium' : 'text-blue-600'
+                              }`}
+                              onClick={() => setEditingDueDate(item.id)}
+                              title="Click to edit due date"
+                            >
+                              <Calendar className="h-3 w-3" />
+                              <span>Due {format(new Date(item.dueDate), 'MMM d, yyyy')}</span>
+                              {new Date(item.dueDate) < new Date() && !item.completed && ' (Overdue)'}
+                            </div>
+                            
+                            {/* Quick action buttons on hover */}
+                            <div className="absolute left-full ml-2 top-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center gap-1 bg-white shadow-lg border rounded-lg p-1">
+                                <button
+                                  onClick={() => handleQuickDueDate(item.id, 'today')}
+                                  className="text-xs px-2 py-1 hover:bg-blue-50 rounded whitespace-nowrap"
+                                >
+                                  Today
+                                </button>
+                                <button
+                                  onClick={() => handleQuickDueDate(item.id, 'tomorrow')}
+                                  className="text-xs px-2 py-1 hover:bg-blue-50 rounded whitespace-nowrap"
+                                >
+                                  Tomorrow
+                                </button>
+                                <button
+                                  onClick={() => handleQuickDueDate(item.id, 'next-week')}
+                                  className="text-xs px-2 py-1 hover:bg-blue-50 rounded whitespace-nowrap"
+                                >
+                                  Next Week
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setEditingDueDate(item.id)}
+                            className="text-xs text-gray-400 hover:text-blue-600 flex items-center gap-1 px-1 py-0.5 hover:bg-blue-50 rounded transition-colors mt-1"
+                          >
+                            <Calendar className="h-3 w-3" />
+                            Add due date
+                          </button>
+                        )}
+                      </div>
                       <button onClick={() => handleChecklistRemove(index)} className="text-gray-400 hover:text-red-600 p-1">
                         <span className="sr-only">Remove</span>
-                        &times;
+                        <X className="h-3 w-3" />
                       </button>
                     </div>
                   ))}
-                  <div className="flex items-center gap-3 mt-2">
-                    <input
-                      className="flex-1 bg-transparent border-b border-gray-200 focus:outline-none focus:border-primary-500 text-gray-900"
-                      placeholder="Add new item..."
-                      value={newChecklistItem}
-                      onChange={e => setNewChecklistItem(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleChecklistAdd(); }}
-                    />
-                    <button onClick={handleChecklistAdd} className="text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded">
-                      Add
-                    </button>
+                  <div className="space-y-2 mt-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 bg-transparent border-b border-gray-200 focus:outline-none focus:border-primary-500 text-gray-900"
+                        placeholder="Add new item..."
+                        value={newChecklistItem}
+                        onChange={e => setNewChecklistItem(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) handleChecklistAdd(); }}
+                      />
+                      <input
+                        type="date"
+                        value={newChecklistDueDate}
+                        onChange={(e) => setNewChecklistDueDate(e.target.value)}
+                        className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        title="Due date (optional)"
+                      />
+                      <button onClick={handleChecklistAdd} className="text-primary-600 hover:text-primary-700 font-medium px-2 py-1 rounded">
+                        Add
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Progress Log Card */}
+              {/* Activities & Timeline Card */}
               <div className="bg-white rounded-lg border border-gray-200 p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                    <Activity className="h-5 w-5 text-red-600" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                      <Calendar className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Activities & Timeline</h3>
+                      <p className="text-sm text-gray-600">Track activities, meetings, and progress</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">Progress Log</h3>
-                    <p className="text-sm text-gray-600">Track updates and milestones</p>
-                  </div>
+                  <button
+                    onClick={() => setShowActivityForm(!showActivityForm)}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 rounded-lg transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Activity
+                  </button>
                 </div>
-                
-                <div className="space-y-4">
-                  {/* Add Progress Log Entry */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <textarea
-                      placeholder="Add progress update..."
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                      rows={3}
-                    />
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="flex items-center gap-2">
-                        <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">
-                          <Paperclip className="h-4 w-4" />
-                        </button>
-                        <span className="text-xs text-gray-500">OneDrive links only</span>
+
+                {/* Activity Form */}
+                {showActivityForm && (
+                  <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Activity Type</label>
+                        <select
+                          value={activityFormData.activityType}
+                          onChange={(e) => setActivityFormData(prev => ({ ...prev, activityType: e.target.value as any }))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {ASSIGNMENT_ACTIVITY_TYPES.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select>
                       </div>
-                      <button className="px-4 py-2 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 transition-colors">
-                        Add Entry
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Method</label>
+                        <select
+                          value={activityFormData.method}
+                          onChange={(e) => setActivityFormData(prev => ({ ...prev, method: e.target.value as any }))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {ASSIGNMENT_ACTIVITY_METHODS.map(method => (
+                            <option key={method} value={method}>{method}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date & Time</label>
+                        <input
+                          type="datetime-local"
+                          value={format(activityFormData.dateTime, "yyyy-MM-dd'T'HH:mm")}
+                          onChange={(e) => setActivityFormData(prev => ({ ...prev, dateTime: new Date(e.target.value) }))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                        <select
+                          value={activityFormData.priority}
+                          onChange={(e) => setActivityFormData(prev => ({ ...prev, priority: e.target.value as any }))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                          {ASSIGNMENT_ACTIVITY_PRIORITIES.map(priority => (
+                            <option key={priority} value={priority}>{priority}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                      <input
+                        type="text"
+                        value={activityFormData.subject}
+                        onChange={(e) => setActivityFormData(prev => ({ ...prev, subject: e.target.value }))}
+                        placeholder="Activity subject..."
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                      <textarea
+                        value={activityFormData.notes}
+                        onChange={(e) => setActivityFormData(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Activity notes..."
+                        rows={3}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={activityFormData.followUpNeeded}
+                          onChange={(e) => setActivityFormData(prev => ({ ...prev, followUpNeeded: e.target.checked }))}
+                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">Follow-up needed</span>
+                      </label>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        onClick={handleAddActivity}
+                        disabled={!activityFormData.subject.trim()}
+                        className="px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 rounded-lg transition-colors"
+                      >
+                        Add Activity
+                      </button>
+                      <button
+                        onClick={() => setShowActivityForm(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg transition-colors"
+                      >
+                        Cancel
                       </button>
                     </div>
                   </div>
+                )}
 
-                  {/* Progress Log Entries */}
+                {/* Activities List */}
+                {selectedAssignment.activities && selectedAssignment.activities.length > 0 ? (
                   <div className="space-y-4">
-                    {selectedAssignment.progressLog.length > 0 ? (
-                      selectedAssignment.progressLog.map((entry, index) => (
-                        <div key={index} className="border-b border-gray-200 pb-4">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center text-xs font-medium">
-                              {entry.userId ? getUserName(entry.userId).substring(0, 2).toUpperCase() : 'U'}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium text-gray-900">{entry.userId ? getUserName(entry.userId) : 'Unknown User'}</span>
-                                <span className="text-sm text-gray-500">
-                                  ({formatDistanceToNow(toDate(entry.timestamp), { addSuffix: true })})
-                                </span>
+                    {selectedAssignment.activities
+                      .sort((a, b) => toDate(b.dateTime).getTime() - toDate(a.dateTime).getTime())
+                      .slice(0, activitiesDisplayCount)
+                      .map((activity) => {
+                        const ActivityIcon = getActivityIcon(activity.activityType);
+                        return (
+                          <div key={activity.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                            <div className="flex items-center justify-between p-3 hover:bg-gray-50">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3">
+                                  <ActivityIcon className="h-5 w-5 text-gray-500" />
+                                  <div className="flex-1">
+                                    <h4 className="font-medium text-gray-900">{activity.subject}</h4>
+                                    <div className="flex items-center gap-3 mt-1">
+                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getActivityStatusColor(activity.status)}`}>
+                                        {activity.status}
+                                      </span>
+                                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(activity.priority || 'Medium')}`}>
+                                        {activity.priority || 'Medium'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-600">
+                                  <span>📅 {format(toDate(activity.dateTime), 'MMM d, yyyy HH:mm')}</span>
+                                  <span>📋 {activity.activityType} • {activity.method}</span>
+                                </div>
                               </div>
-                              <p className="text-gray-700">{entry.message}</p>
+                              <div className="flex items-center gap-2">
+                                {activity.status === 'Scheduled' && (
+                                  <button
+                                    onClick={() => handleCompleteActivity(activity.id)}
+                                    className="text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                  >
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Complete
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteActivity(activity.id)}
+                                  className="text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </div>
                             </div>
+                            {activity.notes && (
+                              <div className="px-3 pb-3 border-t border-gray-100">
+                                <div className="text-sm text-gray-600 mt-2">
+                                  {activity.notes}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-gray-400">
-                        <Activity className="h-8 w-8 mx-auto mb-2" />
-                        <p className="text-sm">No progress log entries yet</p>
-                        <p className="text-xs mt-1">Add your first progress update above</p>
+                        );
+                      })}
+
+                    {/* Show More/Less */}
+                    {selectedAssignment.activities.length > 5 && (
+                      <div className="text-center">
+                        <button
+                          onClick={() => setActivitiesDisplayCount(
+                            activitiesDisplayCount === 5 ? selectedAssignment.activities!.length : 5
+                          )}
+                          className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                          {activitiesDisplayCount === 5 ? 
+                            `Show all ${selectedAssignment.activities.length} activities` : 
+                            'Show less'
+                          }
+                        </button>
                       </div>
                     )}
                   </div>
-                </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">No activities yet</p>
+                    <p className="text-xs mt-1">Add your first activity to start tracking progress</p>
+                  </div>
+                )}
               </div>
 
               {/* Files Card */}

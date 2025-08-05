@@ -19,7 +19,8 @@ import {
   Copy,
   Sparkles,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, isWithinInterval, subWeeks, addWeeks, getISOWeek } from 'date-fns';
 import * as XLSX from 'xlsx';
@@ -87,6 +88,8 @@ interface WeeklySummary {
   overdueActivities: number;
   totalBlockers: number;
 }
+
+
 
 interface OpportunityProgress {
   opportunity: Opportunity;
@@ -304,11 +307,11 @@ export const WeeklyReport: React.FC = () => {
         riskFactors.push(`${overdueActivities.length} overdue activities`);
       }
 
-      // Check for unresolved blockers
+      // Check for unresolved blockers and add their actual text
       const unresolvedBlockers = opp.blockers ? opp.blockers.filter(blocker => !blocker.completed) : [];
-      if (unresolvedBlockers.length > 0) {
-        riskFactors.push(`${unresolvedBlockers.length} active blockers`);
-      }
+      unresolvedBlockers.forEach(blocker => {
+        riskFactors.push(`🚫 ${blocker.text}`);
+      });
 
       if (opp.expectedCloseDate && safeDateConversion(opp.expectedCloseDate) < addWeeks(new Date(), 2) && opp.stage === 'Lead') {
         riskFactors.push('Close date approaching but still in Lead stage');
@@ -430,9 +433,9 @@ export const WeeklyReport: React.FC = () => {
         progress.opportunity.expectedCloseDate ? format(safeDateConversion(progress.opportunity.expectedCloseDate), 'MMM d, yyyy') : '',
         progress.opportunity.aiSummary || '',
         progress.lastActivity ? `${progress.lastActivity.subject} (${format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d')})` : 'No recent activity',
-        progress.lastActivity ? (progress.lastActivity.details || progress.lastActivity.notes || '') : '',
+        progress.lastActivity ? (progress.lastActivity.notes || '') : '',
         progress.nextActivity ? `${progress.nextActivity.subject} (${format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d')})` : 'No scheduled activity',
-        progress.nextActivity ? (progress.nextActivity.details || progress.nextActivity.notes || '') : '',
+        progress.nextActivity ? (progress.nextActivity.notes || '') : '',
         progress.weeklyChanges.join('; '),
         progress.riskFactors.join('; ')
       ])
@@ -491,11 +494,118 @@ export const WeeklyReport: React.FC = () => {
     const nextWeekSheet = XLSX.utils.aoa_to_sheet(nextWeekData);
     XLSX.utils.book_append_sheet(workbook, nextWeekSheet, 'Next Week Activities');
     
+
+    
     // Generate filename
     const filename = `Weekly_Sales_Report_${format(weekStart, 'yyyy-MM-dd')}.xlsx`;
     
     // Save file
     XLSX.writeFile(workbook, filename);
+  };
+
+  const generateFormattedReport = () => {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
+    
+    let report = `WEEKLY SALES REPORT\n`;
+    report += `Week of ${format(weekStart, 'MMMM d')} - ${format(weekEnd, 'MMMM d, yyyy')}\n`;
+    report += `${'='.repeat(80)}\n\n`;
+
+    // Group opportunities by account (matching the visual display)
+    const groupedByAccount = opportunityProgress.slice(0, 15).reduce((groups, progress) => {
+      const accountName = progress.account?.name || 'Unknown Account';
+      if (!groups[accountName]) {
+        groups[accountName] = [];
+      }
+      groups[accountName].push(progress);
+      return groups;
+    }, {} as Record<string, typeof opportunityProgress>);
+
+    // Render each account group
+    Object.keys(groupedByAccount).sort().forEach((accountName) => {
+      const accountOpportunities = groupedByAccount[accountName];
+      
+      // Account header
+      report += `🏢 ${accountName}\n`;
+      report += `${'─'.repeat(50)}\n\n`;
+
+      // Each opportunity in clean format
+      accountOpportunities.forEach((progress, index) => {
+        const opportunityContacts = contacts.filter(c => progress.opportunity.contactIds.includes(c.id || ''));
+        
+        // Opportunity header
+        report += `${progress.opportunity.title}\n`;
+        
+        // Basic info in clean format
+        report += `   Stage: ${progress.opportunity.stage}`;
+        if (progress.opportunity.priority && (progress.opportunity.priority === 'Critical' || progress.opportunity.priority === 'High')) {
+          report += ` | Priority: ${progress.opportunity.priority}`;
+        }
+        report += `\n`;
+        
+        report += `   Deal Value: $${(progress.opportunity.estimatedDealValue || 0).toLocaleString()}\n`;
+        
+        if (progress.opportunity.iolProducts && progress.opportunity.iolProducts.length > 0) {
+          report += `   Products: ${progress.opportunity.iolProducts.join(', ')}\n`;
+        }
+        
+        if (opportunityContacts.length > 0) {
+          report += `   Contacts: ${opportunityContacts.map(c => c.name).join(', ')}\n`;
+        }
+        
+        if (progress.lastActivity) {
+          const lastActivityDate = format(safeDateConversion(progress.lastActivity.dateTime), 'MMM d');
+          report += `   Last Activity: ${progress.lastActivity.subject} (${lastActivityDate})\n`;
+        }
+        
+        if (progress.nextActivity) {
+          const nextActivityDate = format(safeDateConversion(progress.nextActivity.dateTime), 'MMM d');
+          report += `   Next Activity: ${progress.nextActivity.subject} (${nextActivityDate})\n`;
+        }
+
+        // AI Executive Summary (if available)
+        if (progress.opportunity.aiSummary) {
+          report += `\n   ✨ Executive Summary:\n`;
+          report += `   ${progress.opportunity.aiSummary.replace(/\n/g, '\n   ')}\n`;
+        }
+
+        // Weekly Changes and Risk Factors in a compact format
+        if (progress.weeklyChanges.length > 0 || progress.riskFactors.length > 0) {
+          report += `\n`;
+          
+          if (progress.weeklyChanges.length > 0) {
+            report += `   📈 This Week: ${progress.weeklyChanges.join(' • ')}\n`;
+          }
+          
+          if (progress.riskFactors.length > 0) {
+            report += `   ⚠️  Attention Required: ${progress.riskFactors.join(' • ')}\n`;
+          }
+        }
+
+        // Activity notes (compact)
+        if (progress.lastActivity && progress.lastActivity.notes) {
+          report += `\n   Last Activity Notes: ${progress.lastActivity.notes.replace(/\n/g, ' ')}\n`;
+        }
+        
+        if (progress.nextActivity && progress.nextActivity.notes) {
+          report += `   Next Activity Notes: ${progress.nextActivity.notes.replace(/\n/g, ' ')}\n`;
+        }
+
+        // No activity warning
+        if (!progress.lastActivity && !progress.nextActivity) {
+          report += `\n   ⚠️  No recent or scheduled activities\n`;
+        }
+
+        report += `\n`;
+        report += `   ${'-'.repeat(40)}\n\n`;
+      });
+    });
+
+    // Footer
+    report += `${'='.repeat(80)}\n`;
+    report += `Report generated on ${format(new Date(), 'MMMM d, yyyy \'at\' h:mm a')}\n`;
+
+    return report;
   };
 
   const generateEmailContent = () => {
@@ -536,6 +646,33 @@ export const WeeklyReport: React.FC = () => {
     });
 
     return emailContent;
+  };
+
+  const copyFormattedReportToClipboard = async () => {
+    try {
+      const formattedReport = generateFormattedReport();
+      await navigator.clipboard.writeText(formattedReport);
+      alert('Compact table report copied to clipboard! Perfect for pasting into Word or any text editor.');
+    } catch (err) {
+      console.error('Failed to copy formatted report to clipboard:', err);
+      alert('Failed to copy formatted report to clipboard. Please try again.');
+    }
+  };
+
+  const downloadFormattedReport = () => {
+    const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
+    const formattedReport = generateFormattedReport();
+    
+    // Create blob and download
+    const blob = new Blob([formattedReport], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Weekly_Sales_Report_${format(weekStart, 'yyyy-MM-dd')}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   };
 
   const copyToClipboard = async () => {
@@ -679,6 +816,21 @@ export const WeeklyReport: React.FC = () => {
           if (progress.weeklyChanges.length > 0) {
             emailContent += `  📈 This Week: ${progress.weeklyChanges.join(' • ')}\n`;
           }
+
+          // Active blockers for this opportunity
+          const unresolvedBlockers = progress.opportunity.blockers 
+            ? progress.opportunity.blockers.filter(blocker => !blocker.completed) 
+            : [];
+          if (unresolvedBlockers.length > 0) {
+            emailContent += `  🚫 Active Blockers:\n`;
+            unresolvedBlockers.forEach(blocker => {
+              emailContent += `     • ${blocker.text}`;
+              if (blocker.dueDate) {
+                emailContent += ` (Due: ${format(safeDateConversion(blocker.dueDate), 'MMM d')})`;
+              }
+              emailContent += `\n`;
+            });
+          }
         });
 
         emailContent += `\n`;
@@ -735,6 +887,22 @@ export const WeeklyReport: React.FC = () => {
             >
               <Download className="h-4 w-4" />
               Export Excel
+            </button>
+            <button
+              onClick={copyFormattedReportToClipboard}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
+              title="Copy compact table report for Word/text editors"
+            >
+              <Copy className="h-4 w-4" />
+              Copy Report
+            </button>
+            <button
+              onClick={downloadFormattedReport}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50"
+              title="Download compact table report as text file"
+            >
+              <FileText className="h-4 w-4" />
+              Download Report
             </button>
           </div>
         </div>
@@ -818,21 +986,21 @@ export const WeeklyReport: React.FC = () => {
             {/* Risk Alert */}
             {((summary?.overdueActivities || 0) > 0 || (summary?.totalBlockers || 0) > 0) && (
               <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 mb-3">
                   <AlertTriangle className="h-5 w-5 text-red-500" />
-                  <div className="text-sm font-medium text-red-800">
-                    <div className="flex items-center gap-4">
-                      {(summary?.overdueActivities || 0) > 0 && (
-                        <span>⚠️ {summary?.overdueActivities} overdue activities</span>
-                      )}
-                      {(summary?.totalBlockers || 0) > 0 && (
-                        <span>🚫 {summary?.totalBlockers} active blockers</span>
-                      )}
+                  <span className="text-sm font-medium text-red-800">Attention Required</span>
+                </div>
+                <div className="space-y-2">
+                  {(summary?.overdueActivities || 0) > 0 && (
+                    <div className="text-sm text-red-700">
+                      ⚠️ {summary?.overdueActivities} overdue activities require follow-up
                     </div>
-                    <p className="text-xs text-red-600 mt-1">
-                      These issues require immediate attention
-                    </p>
-                  </div>
+                  )}
+                  {(summary?.totalBlockers || 0) > 0 && (
+                    <div className="text-sm text-red-700">
+                      🚫 {summary?.totalBlockers} active blockers preventing progress
+                    </div>
+                  )}
                 </div>
               </div>
             )}

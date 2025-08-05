@@ -9,7 +9,11 @@ import type {
   AddProgressLogEntryRequest,
   UpdateProgressLogEntryRequest,
   RemoveProgressLogEntryRequest,
-  RemoveChecklistItemRequest
+  RemoveChecklistItemRequest,
+  AddAssignmentActivityRequest,
+  UpdateAssignmentActivityRequest,
+  RemoveAssignmentActivityRequest,
+  AssignmentActivity
 } from '../types';
 
 export const useAssignmentsApi = () => {
@@ -133,6 +137,47 @@ export const useAssignmentsApi = () => {
     return (completedItems / assignment.checklist.length) * 100;
   }, []);
 
+  // ============================================================================
+  // ACTIVITY MANAGEMENT METHODS
+  // ============================================================================
+
+  const addActivityToAssignment = useCallback(async (data: AddAssignmentActivityRequest): Promise<Assignment> => {
+    const result = await callFunction('addActivityToAssignment', data);
+    
+    // Update local state
+    setAssignments(prev => prev.map(assignment => 
+      assignment.taskId === data.taskId ? result : assignment
+    ));
+    
+    return result;
+  }, [callFunction]);
+
+  const updateActivityInAssignment = useCallback(async (data: UpdateAssignmentActivityRequest): Promise<Assignment> => {
+    const result = await callFunction('updateActivityInAssignment', data);
+    
+    // Update local state
+    setAssignments(prev => prev.map(assignment => 
+      assignment.taskId === data.taskId ? result : assignment
+    ));
+    
+    return result;
+  }, [callFunction]);
+
+  const removeActivityFromAssignment = useCallback(async (data: RemoveAssignmentActivityRequest): Promise<void> => {
+    await callFunction('removeActivityFromAssignment', data);
+    
+    // Refresh the assignment to get updated activities list
+    const updatedAssignment = await getAssignment(data.taskId);
+    setAssignments(prev => prev.map(assignment => 
+      assignment.taskId === data.taskId ? updatedAssignment : assignment
+    ));
+  }, [callFunction, getAssignment]);
+
+  const getActivitiesByAssignment = useCallback(async (taskId: string): Promise<AssignmentActivity[]> => {
+    const result = await callFunction('getActivitiesByAssignment', { taskId });
+    return result.activities || [];
+  }, [callFunction]);
+
   return {
     assignments,
     createAssignment,
@@ -147,6 +192,12 @@ export const useAssignmentsApi = () => {
     addProgressLogEntry,
     updateProgressLogEntry,
     removeProgressLogEntry,
+    // Activity management methods
+    addActivityToAssignment,
+    updateActivityInAssignment,
+    removeActivityFromAssignment,
+    getActivitiesByAssignment,
+    // Helper methods
     getAssignmentsByStatus,
     getAssignmentProgress,
     loading,

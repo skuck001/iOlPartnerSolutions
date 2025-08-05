@@ -7,6 +7,7 @@ import { RateLimiter, RateLimitPresets } from '../../shared/rateLimiter';
 import { AssignmentService } from './assignments.service';
 import { z } from 'zod';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { Timestamp } from 'firebase-admin/firestore';
 
 setGlobalOptions({
   maxInstances: 10,
@@ -28,9 +29,10 @@ export const CreateAssignmentSchema = z.object({
     z.null(),
     z.undefined()
   ]).optional(),
+  oneDriveTitle: z.string().nullish(),
   checklist: z.array(z.object({
     id: z.string(),
-    label: z.string(),
+    text: z.string(), // Changed from 'label' to 'text'
     completed: z.boolean(),
     dueDate: z.string().nullish().transform(val => val ? new Date(val) : undefined),
   })).optional(),
@@ -61,6 +63,7 @@ export const UpdateAssignmentSchema = z.object({
     z.null(),
     z.undefined()
   ]).optional(),
+  oneDriveTitle: z.string().nullish(),
 }).transform((data) => {
   const { taskId, ...updateData } = data;
   const cleanData = Object.entries(updateData).reduce((acc, [key, value]) => {
@@ -78,7 +81,7 @@ export const DeleteAssignmentSchema = z.object({
 
 export const ChecklistItemSchema = z.object({
   taskId: z.string().min(1, 'Task ID is required'),
-  label: z.string().min(1, 'Label is required'),
+  text: z.string().min(1, 'Text is required'), // Changed from 'label' to 'text'
   completed: z.boolean().optional(),
   dueDate: z.string().nullish().transform(val => val ? new Date(val) : undefined),
 });
@@ -86,7 +89,7 @@ export const ChecklistItemSchema = z.object({
 export const UpdateChecklistItemSchema = z.object({
   taskId: z.string().min(1, 'Task ID is required'),
   itemId: z.string().min(1, 'Item ID is required'),
-  label: z.string().nullish(),
+  text: z.string().nullish(), // Changed from 'label' to 'text'
   completed: z.boolean().nullish(),
   dueDate: z.string().nullish().transform(val => val ? new Date(val) : undefined),
 });
@@ -105,6 +108,48 @@ export const UpdateProgressLogEntrySchema = z.object({
 export const RemoveProgressLogEntrySchema = z.object({
   taskId: z.string().min(1, 'Task ID is required'),
   entryId: z.string().min(1, 'Entry ID is required'),
+});
+
+// Activity validation schemas
+export const AssignmentActivitySchema = z.object({
+  taskId: z.string().min(1, 'Task ID is required'),
+  activityType: z.enum(['Meeting', 'Email', 'Call', 'WhatsApp', 'Demo', 'Workshop', 'Review', 'Update']),
+  dateTime: z.string().transform(val => new Date(val)),
+  method: z.enum(['In-person', 'Zoom', 'Phone', 'Teams', 'Email', 'Document', 'Other']),
+  subject: z.string().min(1, 'Subject is required'),
+  notes: z.string(),
+  assignedTo: z.string().min(1, 'Assigned to is required'),
+  relatedContactIds: z.array(z.string()).optional(),
+  attachments: z.array(z.string()).optional(),
+  followUpNeeded: z.boolean(),
+  status: z.enum(['Scheduled', 'Completed', 'Cancelled']),
+  followUpDate: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  followUpSubject: z.string().optional(),
+  priority: z.enum(['High', 'Medium', 'Low']).optional(),
+});
+
+export const UpdateAssignmentActivitySchema = z.object({
+  taskId: z.string().min(1, 'Task ID is required'),
+  activityId: z.string().min(1, 'Activity ID is required'),
+  activityType: z.enum(['Meeting', 'Email', 'Call', 'WhatsApp', 'Demo', 'Workshop', 'Review', 'Update']).optional(),
+  dateTime: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  method: z.enum(['In-person', 'Zoom', 'Phone', 'Teams', 'Email', 'Document', 'Other']).optional(),
+  subject: z.string().optional(),
+  notes: z.string().optional(),
+  assignedTo: z.string().optional(),
+  relatedContactIds: z.array(z.string()).optional(),
+  attachments: z.array(z.string()).optional(),
+  followUpNeeded: z.boolean().optional(),
+  status: z.enum(['Scheduled', 'Completed', 'Cancelled']).optional(),
+  completedAt: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  followUpDate: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  followUpSubject: z.string().optional(),
+  priority: z.enum(['High', 'Medium', 'Low']).optional(),
+});
+
+export const RemoveAssignmentActivitySchema = z.object({
+  taskId: z.string().min(1, 'Task ID is required'),
+  activityId: z.string().min(1, 'Activity ID is required'),
 });
 
 // Create Assignment
@@ -438,4 +483,127 @@ export const removeProgressLogEntry = onCall(
     console.log(`✅ Progress log entry removed from assignment: ${taskId}`);
     return result;
   }, { functionName: 'removeProgressLogEntry', action: 'PROGRESS_LOG_REMOVE' })
+);
+
+// ============================================================================
+// ACTIVITY MANAGEMENT CLOUD FUNCTIONS
+// ============================================================================
+
+// Add Activity to Assignment
+export const addActivityToAssignment = onCall(
+  { 
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], 
+    maxInstances: 10 
+  },
+  withErrorHandling(async (request) => {
+    const user = await authenticateUser(request.auth);
+    
+    await RateLimiter.checkLimit(
+      user.uid, 
+      RateLimitPresets.write.maxRequests, 
+      RateLimitPresets.write.windowMs, 
+      'addActivityToAssignment'
+    );
+    
+    const { taskId, ...activityData } = validateData(AssignmentActivitySchema, request.data);
+    
+    // Convert Date objects to Timestamps
+    const processedActivityData = {
+      ...activityData,
+      dateTime: Timestamp.fromDate(activityData.dateTime),
+      followUpDate: activityData.followUpDate ? Timestamp.fromDate(activityData.followUpDate) : undefined
+    };
+    
+    const result = await assignmentService.addActivityToAssignment(taskId, processedActivityData, user.uid);
+    
+    console.log(`✅ Activity added to assignment: ${taskId}`);
+    return { success: true, activity: result };
+  }, { functionName: 'addActivityToAssignment', action: 'ACTIVITY_ADD' })
+);
+
+// Update Activity in Assignment
+export const updateActivityInAssignment = onCall(
+  { 
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], 
+    maxInstances: 10 
+  },
+  withErrorHandling(async (request) => {
+    const user = await authenticateUser(request.auth);
+    
+    await RateLimiter.checkLimit(
+      user.uid, 
+      RateLimitPresets.write.maxRequests, 
+      RateLimitPresets.write.windowMs, 
+      'updateActivityInAssignment'
+    );
+    
+    const { taskId, activityId, ...updateData } = validateData(UpdateAssignmentActivitySchema, request.data);
+    
+    // Convert Date objects to Timestamps
+    const processedUpdateData = {
+      ...updateData,
+      dateTime: updateData.dateTime ? Timestamp.fromDate(updateData.dateTime) : undefined,
+      completedAt: updateData.completedAt ? Timestamp.fromDate(updateData.completedAt) : undefined,
+      followUpDate: updateData.followUpDate ? Timestamp.fromDate(updateData.followUpDate) : undefined
+    };
+    
+    const result = await assignmentService.updateActivityInAssignment(taskId, activityId, processedUpdateData, user.uid);
+    
+    console.log(`✅ Activity updated in assignment: ${taskId}`);
+    return { success: true, activity: result };
+  }, { functionName: 'updateActivityInAssignment', action: 'ACTIVITY_UPDATE' })
+);
+
+// Remove Activity from Assignment
+export const removeActivityFromAssignment = onCall(
+  { 
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], 
+    maxInstances: 10 
+  },
+  withErrorHandling(async (request) => {
+    const user = await authenticateUser(request.auth);
+    
+    await RateLimiter.checkLimit(
+      user.uid, 
+      RateLimitPresets.write.maxRequests, 
+      RateLimitPresets.write.windowMs, 
+      'removeActivityFromAssignment'
+    );
+    
+    const { taskId, activityId } = validateData(RemoveAssignmentActivitySchema, request.data);
+    
+    await assignmentService.deleteActivityFromAssignment(taskId, activityId, user.uid);
+    
+    console.log(`✅ Activity removed from assignment: ${taskId}`);
+    return { success: true };
+  }, { functionName: 'removeActivityFromAssignment', action: 'ACTIVITY_REMOVE' })
+);
+
+// Get Activities by Assignment
+export const getActivitiesByAssignment = onCall(
+  { 
+    cors: ['http://localhost:5173', 'https://localhost:5173', 'https://iol-partner-solutions.web.app'], 
+    maxInstances: 10 
+  },
+  withErrorHandling(async (request) => {
+    const user = await authenticateUser(request.auth);
+    
+    await RateLimiter.checkLimit(
+      user.uid, 
+      RateLimitPresets.read.maxRequests, 
+      RateLimitPresets.read.windowMs, 
+      'getActivitiesByAssignment'
+    );
+    
+    const { taskId } = request.data;
+    
+    if (!taskId) {
+      throw new HttpsError('invalid-argument', 'Task ID is required');
+    }
+    
+    const result = await assignmentService.getActivitiesByAssignment(taskId);
+    
+    console.log(`✅ Activities retrieved for assignment: ${taskId}`);
+    return { success: true, activities: result };
+  }, { functionName: 'getActivitiesByAssignment', action: 'ACTIVITIES_GET' })
 ); 
