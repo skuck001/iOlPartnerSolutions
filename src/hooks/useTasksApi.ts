@@ -69,7 +69,7 @@ export const useTasksApi = () => {
   const getTask = useCallback(async (taskId: string): Promise<Task> => {
     try {
       const response = await callFunction('getTask', { taskId });
-      return response.data.task as Task;
+      return response.task as Task;
     } catch (err) {
       console.error('Error getting task:', err);
       throw err;
@@ -86,7 +86,7 @@ export const useTasksApi = () => {
       };
 
       const response = await callFunction('createTask', processedData);
-      const newTask = response.data.task as Task;
+      const newTask = response.task as Task;
       
       // Update local state
       setTasks(prev => [newTask, ...prev]);
@@ -113,7 +113,7 @@ export const useTasksApi = () => {
         taskId,
         ...processedUpdates
       });
-      const updatedTask = response.data.task as Task;
+      const updatedTask = response.task as Task;
       
       // Update local state
       setTasks(prev => prev.map(task => 
@@ -163,7 +163,7 @@ export const useTasksApi = () => {
         opportunityId,
         ...options
       });
-      return response.data.activities as Activity[];
+      return response.activities as Activity[];
     } catch (err) {
       console.error('Error getting activities:', err);
       throw err;
@@ -192,7 +192,7 @@ export const useTasksApi = () => {
         opportunityId,
         ...processedData
       });
-      const newActivity = response.data.activity as Activity;
+      const newActivity = response.activity as Activity;
       
       // Update local state
       setActivities(prev => [newActivity, ...prev]);
@@ -230,7 +230,7 @@ export const useTasksApi = () => {
         activityId,
         ...processedUpdates
       });
-      const updatedActivity = response.data.activity as Activity;
+      const updatedActivity = response.activity as Activity;
       
       // Update local state
       setActivities(prev => prev.map(activity => 
@@ -277,7 +277,7 @@ export const useTasksApi = () => {
   const getChecklistByOpportunity = useCallback(async (opportunityId: string): Promise<ChecklistItem[]> => {
     try {
       const response = await callFunction('getChecklistByOpportunity', { opportunityId });
-      return response.data.checklist as ChecklistItem[];
+      return response.checklist as ChecklistItem[];
     } catch (err) {
       console.error('Error getting checklist:', err);
       throw err;
@@ -291,7 +291,7 @@ export const useTasksApi = () => {
         opportunityId,
         text
       });
-      const newItem = response.data.item as ChecklistItem;
+      const newItem = response.item as ChecklistItem;
       
       // Update local state
       setChecklist(prev => [newItem, ...prev]);
@@ -315,7 +315,7 @@ export const useTasksApi = () => {
         itemId,
         ...updates
       });
-      const updatedItem = response.data.item as ChecklistItem;
+      const updatedItem = response.item as ChecklistItem;
       
       // Update local state
       setChecklist(prev => prev.map(item => 

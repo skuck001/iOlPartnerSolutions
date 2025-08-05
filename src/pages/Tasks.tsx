@@ -9,6 +9,7 @@ import { useAccountsApi } from '../hooks/useAccountsApi';
 import { useContactsApi } from '../hooks/useContactsApi';
 import { useOpportunitiesApi } from '../hooks/useOpportunitiesApi';
 import { useUsersApi } from '../hooks/useUsersApi';
+import { useTasksApi } from '../hooks/useTasksApi';
 import { format, addDays, startOfDay, isToday, isTomorrow, isThisWeek, isPast, isSameDay } from 'date-fns';
 import { 
   LayoutGrid, 
@@ -21,7 +22,8 @@ import {
   ChevronLeft, 
   ChevronRight,
   Plus,
-  CheckSquare
+  CheckSquare,
+  ArrowRight
 } from 'lucide-react';
 
 // Helper function to convert various date formats to Date object
@@ -104,6 +106,7 @@ export const Tasks: React.FC = () => {
   const { fetchAccounts } = useAccountsApi();
   const { getContacts } = useContactsApi();
   const { getAllUsers, getUserDisplayNameById } = useUsersApi();
+  const { updateActivityInOpportunity } = useTasksApi();
   
   // State
   const [activities, setActivities] = useState<EnhancedTask[]>([]);
@@ -256,6 +259,44 @@ export const Tasks: React.FC = () => {
         opportunity.title,
         account.name
       );
+    }
+  };
+
+  // Quick action to push task to tomorrow with note
+  const handlePushToTomorrow = async (taskId: string) => {
+    try {
+      const [opportunityId, activityId] = taskId.split('_');
+      const opportunity = opportunities.find(o => o.id === opportunityId);
+      const activity = opportunity?.activities.find(a => a.id === activityId);
+
+      if (!opportunity || !activity) {
+        console.error('Activity not found');
+        return;
+      }
+
+      // Get current date in DD/MM format
+      const currentDate = format(new Date(), 'dd/MM');
+      const newNote = `${currentDate}: No news pushed to tomorrow`;
+      
+      // Combine existing notes with new note
+      const updatedNotes = activity.notes 
+        ? `${activity.notes}\n${newNote}`
+        : newNote;
+
+      // Set date to tomorrow
+      const tomorrow = addDays(new Date(), 1);
+
+      // Update the activity
+      await updateActivityInOpportunity(opportunityId, activityId, {
+        dateTime: tomorrow,
+        notes: updatedNotes,
+        updatedAt: new Date()
+      });
+
+      // Refresh data to show updated task
+      await fetchData();
+    } catch (error) {
+      console.error('Error pushing task to tomorrow:', error);
     }
   };
 
@@ -707,16 +748,29 @@ export const Tasks: React.FC = () => {
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {task.status === 'Scheduled' && (
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleCompleteActivity(task.id);
-                                      }}
-                                      className="text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
-                                    >
-                                      <CheckCircle className="h-3 w-3" />
-                                      Complete
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handlePushToTomorrow(task.id);
+                                        }}
+                                        className="text-sm bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                        title="Push to tomorrow with note"
+                                      >
+                                        <ArrowRight className="h-3 w-3" />
+                                        Push
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCompleteActivity(task.id);
+                                        }}
+                                        className="text-sm bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded transition-colors flex items-center gap-1"
+                                      >
+                                        <CheckCircle className="h-3 w-3" />
+                                        Complete
+                                      </button>
+                                    </>
                                   )}
                                   {task.status === 'Completed' && (
                                     <span className="text-sm text-green-600 flex items-center gap-1">
