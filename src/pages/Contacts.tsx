@@ -415,15 +415,15 @@ export const Contacts: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Contacts</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Contacts</h1>
             <p className="text-sm text-gray-600 mt-1">
               {filteredAndSortedContacts.length} of {contacts?.length || 0} contacts across {sortedAccountNames.length} companies
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <button
               onClick={handleExportToExcel}
               className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
@@ -446,7 +446,7 @@ export const Contacts: React.FC = () => {
         </div>
         
         {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <input
@@ -458,7 +458,7 @@ export const Contacts: React.FC = () => {
             />
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             <select
               value={contactTypeFilter}
               onChange={(e) => setContactTypeFilter(e.target.value as ContactType | 'All')}
@@ -849,6 +849,52 @@ export const Contacts: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Floating Action Buttons - Desktop */}
+      <div className="hidden md:flex fixed bottom-6 right-6 flex-col gap-3 z-50">
+        {/* Export Button */}
+        <button
+          onClick={handleExportToExcel}
+          className="group relative inline-flex items-center justify-center w-14 h-14 bg-green-600 text-white rounded-full hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          title={`Export ${filteredAndSortedContacts.length} contacts to Excel`}
+        >
+          <Download className="h-6 w-6" />
+          <span className="absolute right-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            Export Excel ({filteredAndSortedContacts.length})
+          </span>
+        </button>
+
+        {/* New Contact Button */}
+        <button
+          onClick={handleAdd}
+          className="group relative inline-flex items-center justify-center w-14 h-14 bg-primary-600 text-white rounded-full hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-500 focus:ring-opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          title="Create New Contact"
+        >
+          <Plus className="h-6 w-6" />
+          <span className="absolute right-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            New Contact
+          </span>
+        </button>
+      </div>
+
+      {/* Mobile Floating Action Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3 z-40">
+        <button
+          onClick={handleExportToExcel}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
+          title={`Export ${filteredAndSortedContacts.length} contacts to Excel`}
+        >
+          <Download className="h-5 w-5" />
+          <span>Export ({filteredAndSortedContacts.length})</span>
+        </button>
+        <button
+          onClick={handleAdd}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors shadow-sm"
+        >
+          <Plus className="h-5 w-5" />
+          <span>New</span>
+        </button>
       </div>
     </div>
   );

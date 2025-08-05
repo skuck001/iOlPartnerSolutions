@@ -12,7 +12,8 @@ import {
   TrendingUp,
   ClipboardList,
   Settings,
-  FileCheck
+  FileCheck,
+  Menu
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
@@ -39,6 +40,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const [userProfile, setUserProfile] = useState<User | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const fetchUserProfile = async () => {
@@ -108,8 +110,26 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
+      {/* Mobile menu button */}
+      <div className="lg:hidden fixed top-4 left-4 z-50">
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="p-2 bg-black text-white rounded-md shadow-lg"
+        >
+          <Menu className="h-6 w-6" />
+        </button>
+      </div>
+
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <div className="flex-shrink-0 w-64 bg-black text-white border-r border-gray-800 h-screen sticky top-0">
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 ease-in-out flex-shrink-0 w-64 bg-black text-white border-r border-gray-800 h-screen fixed top-0 left-0 z-40`}>
         <div className="flex flex-col h-full text-white bg-black">
           {/* Logo/Header */}
           <div className="flex items-center gap-3 p-6 border-b border-gray-800">
@@ -233,7 +253,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 bg-gray-50">
+      <div className="flex-1 bg-gray-50 lg:ml-64">
         {children}
       </div>
     </div>

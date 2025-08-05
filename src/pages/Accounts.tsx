@@ -295,18 +295,16 @@ export const Accounts: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-
-
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Accounts</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Accounts</h1>
             <p className="text-sm text-gray-600 mt-1">
               {filteredAndSortedAccounts.length} of {accounts?.length || 0} accounts
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             <button
               onClick={handleExportToExcel}
               className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
@@ -329,7 +327,7 @@ export const Accounts: React.FC = () => {
         </div>
         
         {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col gap-4">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <input
@@ -350,10 +348,10 @@ export const Accounts: React.FC = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
         ) : filteredAndSortedAccounts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500 px-4">
             <Building2 className="h-12 w-12 text-gray-300 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No accounts found</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500 mb-4 text-center">
               {searchTerm
                 ? 'Try adjusting your search' 
                 : 'Get started by creating your first account'}
@@ -369,13 +367,13 @@ export const Accounts: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="bg-white shadow-sm rounded-lg mx-6 mb-6 overflow-hidden border border-gray-200 mt-6">
+          <div className="bg-white shadow-sm rounded-lg mx-2 sm:mx-6 mb-6 overflow-hidden border border-gray-200 mt-4 sm:mt-6">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('name')}
                     >
                       <div className="flex items-center">
@@ -384,28 +382,28 @@ export const Accounts: React.FC = () => {
                       </div>
                     </th>
 
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contacts
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Products
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Opportunities
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Deal Value
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Primary Contact
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tags & Links
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Owner
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -427,7 +425,7 @@ export const Accounts: React.FC = () => {
                         className="hover:bg-gray-50 cursor-pointer transition-colors"
                       >
                         {/* Account Name */}
-                        <td className="px-6 py-4">
+                        <td className="px-3 sm:px-6 py-4">
                           <div className="flex items-center">
                             <div className="h-10 w-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
                               {account.logo ? (
@@ -459,7 +457,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Contacts */}
-                        <td className="px-6 py-4">
+                        <td className="hidden md:table-cell px-6 py-4">
                           <div className="flex items-center">
                             <Users className="h-4 w-4 text-gray-400 mr-2" />
                             <span className="text-sm text-gray-900 font-medium">
@@ -475,7 +473,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Products */}
-                        <td className="px-6 py-4">
+                        <td className="hidden lg:table-cell px-6 py-4">
                           <div className="flex items-center">
                             <Package className="h-4 w-4 text-gray-400 mr-2" />
                             <span className="text-sm text-gray-900 font-medium">
@@ -491,7 +489,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Opportunities */}
-                        <td className="px-6 py-4">
+                        <td className="hidden md:table-cell px-6 py-4">
                           <div className="flex items-center space-x-3">
                             <div className="flex items-center">
                               <Activity className="h-4 w-4 text-blue-500 mr-1" />
@@ -519,7 +517,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Deal Value */}
-                        <td className="px-6 py-4">
+                        <td className="hidden lg:table-cell px-6 py-4">
                           <div className="space-y-1">
                             <div className="flex items-center">
                               <DollarSign className="h-4 w-4 text-green-500 mr-1" />
@@ -539,7 +537,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Primary Contact */}
-                        <td className="px-6 py-4">
+                        <td className="hidden lg:table-cell px-6 py-4">
                           {primaryContact ? (
                             <div className="flex items-center">
                               <Users className="h-4 w-4 text-gray-400 mr-2" />
@@ -558,7 +556,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Tags & Links */}
-                        <td className="px-6 py-4">
+                        <td className="hidden lg:table-cell px-6 py-4">
                           <div className="space-y-1">
                             {(account.tags || []).length > 0 && (
                               <div className="flex items-center">
@@ -589,7 +587,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Owner */}
-                        <td className="px-6 py-4">
+                        <td className="hidden md:table-cell px-6 py-4">
                           <div className="flex items-center">
                             <Users className="h-4 w-4 text-gray-400 mr-2" />
                             <span className="text-sm text-gray-900 font-medium">
@@ -599,7 +597,7 @@ export const Accounts: React.FC = () => {
                         </td>
 
                         {/* Actions */}
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-3 sm:px-6 py-4 text-right">
                           <div className="flex items-center justify-end space-x-2">
                             <button
                               onClick={(e) => {
@@ -631,6 +629,52 @@ export const Accounts: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Floating Action Buttons - Desktop */}
+      <div className="hidden md:flex fixed bottom-6 right-6 flex-col gap-3 z-50">
+        {/* Export Button */}
+        <button
+          onClick={handleExportToExcel}
+          className="group relative inline-flex items-center justify-center w-14 h-14 bg-green-600 text-white rounded-full hover:bg-green-700 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          title={`Export ${filteredAndSortedAccounts.length} accounts to Excel`}
+        >
+          <Download className="h-6 w-6" />
+          <span className="absolute right-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            Export Excel ({filteredAndSortedAccounts.length})
+          </span>
+        </button>
+
+        {/* New Account Button */}
+        <button
+          onClick={handleAdd}
+          className="group relative inline-flex items-center justify-center w-14 h-14 bg-primary-600 text-white rounded-full hover:bg-primary-700 focus:outline-none focus:ring-4 focus:ring-primary-500 focus:ring-opacity-50 transition-all duration-200 shadow-lg hover:shadow-xl"
+          title="Create New Account"
+        >
+          <Plus className="h-6 w-6" />
+          <span className="absolute right-16 top-1/2 transform -translate-y-1/2 bg-gray-900 text-white text-sm px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
+            New Account
+          </span>
+        </button>
+      </div>
+
+      {/* Mobile Floating Action Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex gap-3 z-40">
+        <button
+          onClick={handleExportToExcel}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 transition-colors shadow-sm"
+          title={`Export ${filteredAndSortedAccounts.length} accounts to Excel`}
+        >
+          <Download className="h-5 w-5" />
+          <span>Export ({filteredAndSortedAccounts.length})</span>
+        </button>
+        <button
+          onClick={handleAdd}
+          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-opacity-50 transition-colors shadow-sm"
+        >
+          <Plus className="h-5 w-5" />
+          <span>New</span>
+        </button>
       </div>
     </div>
   );

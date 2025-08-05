@@ -18,7 +18,8 @@ import {
   CheckCircle,
   DollarSign,
   Package,
-  Download
+  Download,
+  Menu
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Opportunity, OpportunityStage, OpportunityPriority, Account, Contact, Product } from '../types';
@@ -121,6 +122,7 @@ export const Opportunities: React.FC = () => {
   const [stageFilter, setStageFilter] = useState<OpportunityStage | 'All'>('All');
   const [priorityFilter, setPriorityFilter] = useState<OpportunityPriority | 'All'>('All');
   const [excludeClosed, setExcludeClosed] = useState(true); // New state for exclude closed checkbox
+  const [showFilters, setShowFilters] = useState(false); // Mobile filters toggle
 
   useEffect(() => {
     fetchAllData();
@@ -377,13 +379,13 @@ export const Opportunities: React.FC = () => {
           : '',
         'Next Activity Subject': nextScheduled?.subject || '',
         'Next Activity Type': nextScheduled?.activityType || '',
-        'Next Activity Details': nextScheduled?.details || nextScheduled?.notes || '',
+        'Next Activity Details': nextScheduled?.notes || '',
         'Last Activity Date': lastCompleted 
           ? format(toDate(lastCompleted.dateTime), 'yyyy-MM-dd HH:mm') 
           : '',
         'Last Activity Subject': lastCompleted?.subject || '',
         'Last Activity Type': lastCompleted?.activityType || '',
-        'Last Activity Details': lastCompleted?.details || lastCompleted?.notes || '',
+        'Last Activity Details': lastCompleted?.notes || '',
         'Contact Count': opportunityContacts.length,
         'Primary Contact': opportunityContacts[0]?.name || '',
         'Primary Contact Email': opportunityContacts[0]?.email || '',
@@ -433,12 +435,12 @@ export const Opportunities: React.FC = () => {
 };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Opportunities</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Opportunities</h1>
             <p className="text-sm text-gray-600 mt-1">
               {filteredAndSortedOpportunities.length} of {opportunities?.length || 0} opportunities
             </p>
@@ -446,7 +448,8 @@ export const Opportunities: React.FC = () => {
         </div>
         
         {/* Search and Filters */}
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col gap-4">
+          {/* Search Bar */}
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <input
@@ -458,7 +461,22 @@ export const Opportunities: React.FC = () => {
             />
           </div>
           
-          <div className="flex flex-col sm:flex-row gap-3">
+          {/* Mobile Filter Toggle */}
+          <div className="lg:hidden">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors"
+            >
+              <Filter className="h-4 w-4" />
+              <span className="text-sm text-gray-700">Filters</span>
+              <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
+                {[stageFilter, priorityFilter].filter(f => f !== 'All').length + (excludeClosed ? 1 : 0)}
+              </span>
+            </button>
+          </div>
+          
+          {/* Filters - Desktop */}
+          <div className="hidden lg:flex flex-row gap-3">
             {/* Exclude Closed Checkbox */}
             <label className="flex items-center gap-2 px-3 py-2.5 border border-gray-300 rounded-lg bg-white shadow-sm hover:bg-gray-50 transition-colors cursor-pointer">
               <input
@@ -492,6 +510,46 @@ export const Opportunities: React.FC = () => {
               ))}
             </select>
           </div>
+          
+          {/* Filters - Mobile (Collapsible) */}
+          {showFilters && (
+            <div className="lg:hidden bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+              {/* Exclude Closed Checkbox */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={excludeClosed}
+                  onChange={(e) => setExcludeClosed(e.target.checked)}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500 h-4 w-4"
+                />
+                <span className="text-sm text-gray-700">Exclude Closed</span>
+              </label>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <select
+                  value={stageFilter}
+                  onChange={(e) => setStageFilter(e.target.value as OpportunityStage | 'All')}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white"
+                >
+                  <option value="All">All Stages</option>
+                  {STAGES.map(stage => (
+                    <option key={stage} value={stage}>{stage}</option>
+                  ))}
+                </select>
+                
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value as OpportunityPriority | 'All')}
+                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white"
+                >
+                  <option value="All">All Priorities</option>
+                  {PRIORITIES.map(priority => (
+                    <option key={priority} value={priority}>{priority}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -502,10 +560,10 @@ export const Opportunities: React.FC = () => {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
           </div>
         ) : filteredAndSortedOpportunities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-500">
+          <div className="flex flex-col items-center justify-center h-64 text-gray-500 px-4">
             <TrendingUp className="h-12 w-12 text-gray-300 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No opportunities found</h3>
-            <p className="text-sm text-gray-500 mb-4">
+            <p className="text-sm text-gray-500 mb-4 text-center">
               {searchTerm || stageFilter !== 'All' || priorityFilter !== 'All' 
                 ? 'Try adjusting your search or filters' 
                 : 'Get started by creating your first opportunity'}
@@ -521,49 +579,52 @@ export const Opportunities: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="bg-white shadow-sm rounded-lg mx-6 mb-6 overflow-hidden border border-gray-200 mt-6">
+          <div className="bg-white shadow-sm rounded-lg mx-2 sm:mx-6 mb-6 overflow-hidden border border-gray-200 mt-4 sm:mt-6">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('accountName')}
                     >
                       <div className="flex items-center">
-                        Account & Product
+                        <span className="hidden sm:inline">Account & Product</span>
+                        <span className="sm:hidden">Account</span>
                         {getSortIcon('accountName')}
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('title')}
                     >
                       <div className="flex items-center">
-                        Opportunity
+                        <span className="hidden sm:inline">Opportunity</span>
+                        <span className="sm:hidden">Title</span>
                         {getSortIcon('title')}
                       </div>
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       iOL Products
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('stage')}
                     >
                       <div className="flex items-center">
-                        Stage & Progress
+                        <span className="hidden sm:inline">Stage & Progress</span>
+                        <span className="sm:hidden">Stage</span>
                         {getSortIcon('stage')}
                       </div>
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Next Activity
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Last Activity
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('priority')}
                     >
                       <div className="flex items-center">
@@ -572,16 +633,17 @@ export const Opportunities: React.FC = () => {
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="hidden md:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('estimatedDealValue')}
                     >
                       <div className="flex items-center">
-                        Deal Value
+                        <span className="hidden sm:inline">Deal Value</span>
+                        <span className="sm:hidden">Value</span>
                         {getSortIcon('estimatedDealValue')}
                       </div>
                     </th>
                     <th 
-                      className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
+                      className="hidden lg:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 group"
                       onClick={() => handleSort('expectedCloseDate')}
                     >
                       <div className="flex items-center">
@@ -589,10 +651,10 @@ export const Opportunities: React.FC = () => {
                         {getSortIcon('expectedCloseDate')}
                       </div>
                     </th>
-                    <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="hidden md:table-cell px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contacts
                     </th>
-                    <th className="px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
                     </th>
                   </tr>
@@ -602,7 +664,7 @@ export const Opportunities: React.FC = () => {
                     <React.Fragment key={accountName}>
                       {/* Account Group Header */}
                       <tr className="bg-gray-100">
-                        <td colSpan={11} className="px-6 py-3">
+                        <td colSpan={11} className="px-3 sm:px-6 py-3">
                           <div className="flex items-center gap-2">
                             <Building2 className="h-5 w-5 text-gray-600" />
                             <span className="text-sm font-semibold text-gray-900">{accountName}</span>
@@ -629,9 +691,9 @@ export const Opportunities: React.FC = () => {
                             className="hover:bg-gray-50 cursor-pointer transition-colors"
                           >
                             {/* Account & Product */}
-                            <td className="px-6 py-4">
+                            <td className="px-3 sm:px-6 py-4">
                               <div className="flex items-start">
-                                <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                                <Building2 className="h-4 w-4 text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
                                 <div className="min-w-0 flex-1">
                                   <div className="text-sm font-medium text-gray-900 truncate">
                                     {account?.name || 'Unknown Account'}
@@ -641,7 +703,7 @@ export const Opportunities: React.FC = () => {
                                   </div>
                                   {opportunity.productId && getProductName(opportunity.productId) && (
                                     <div className="flex items-center gap-1 mt-1">
-                                      <Package className="h-3 w-3 text-blue-500" />
+                                      <Package className="h-3 w-3 text-blue-500 flex-shrink-0" />
                                       <span className="text-xs text-blue-700 font-medium truncate">
                                         {getProductName(opportunity.productId)}
                                       </span>
@@ -652,22 +714,22 @@ export const Opportunities: React.FC = () => {
                             </td>
 
                             {/* Opportunity Title */}
-                            <td className="px-6 py-4">
-                              <div className="max-w-48">
+                            <td className="px-3 sm:px-6 py-4">
+                              <div className="max-w-32 sm:max-w-48">
                                 <div className="text-sm font-medium text-gray-900 leading-tight line-clamp-2">
                                   {opportunity.title}
                                 </div>
                                 <div className="flex items-center gap-1 mt-2">
-                                  <MapPin className="h-3 w-3 text-gray-400" />
+                                  <MapPin className="h-3 w-3 text-gray-400 flex-shrink-0" />
                                   <span className="text-xs text-gray-500">{account?.region || 'Unknown'}</span>
                                 </div>
                               </div>
                             </td>
 
-                            {/* iOL Products */}
-                            <td className="px-6 py-4">
+                            {/* iOL Products - Desktop Only */}
+                            <td className="hidden lg:table-cell px-6 py-4">
                               <div className="flex items-start">
-                                <Package className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
+                                <Package className="h-4 w-4 text-gray-400 mr-2 mt-0.5 flex-shrink-0" />
                                 <div className="max-w-32">
                                   {opportunity.iolProducts && opportunity.iolProducts.length > 0 ? (
                                     <div className="space-y-1">
@@ -690,7 +752,7 @@ export const Opportunities: React.FC = () => {
                             </td>
 
                             {/* Stage & Progress */}
-                            <td className="px-6 py-4">
+                            <td className="px-3 sm:px-6 py-4">
                               <div className="space-y-2">
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStageColor(opportunity.stage)}`}>
                                   {opportunity.stage}
@@ -708,8 +770,8 @@ export const Opportunities: React.FC = () => {
                               </div>
                             </td>
 
-                            {/* Next Activity */}
-                            <td className="px-6 py-4">
+                            {/* Next Activity - Desktop Only */}
+                            <td className="hidden md:table-cell px-6 py-4">
                               <div>
                                 {nextScheduledActivity ? (
                                   (() => {
@@ -742,8 +804,8 @@ export const Opportunities: React.FC = () => {
                               </div>
                             </td>
 
-                            {/* Last Activity */}
-                            <td className="px-6 py-4">
+                            {/* Last Activity - Desktop Only */}
+                            <td className="hidden lg:table-cell px-6 py-4">
                               <div>
                                 {lastCompletedActivity ? (
                                   <div className="flex items-center gap-2">
@@ -767,14 +829,14 @@ export const Opportunities: React.FC = () => {
                             </td>
 
                             {/* Priority */}
-                            <td className="px-6 py-4">
+                            <td className="px-3 sm:px-6 py-4">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(opportunity.priority)}`}>
                                 {opportunity.priority}
                               </span>
                             </td>
 
-                            {/* Deal Value */}
-                            <td className="px-6 py-4">
+                            {/* Deal Value - Desktop Only */}
+                            <td className="hidden md:table-cell px-6 py-4">
                               <div className="flex items-center">
                                 <DollarSign className="h-4 w-4 text-green-500 mr-1" />
                                 <span className="text-sm font-medium text-gray-900">
@@ -786,8 +848,8 @@ export const Opportunities: React.FC = () => {
                               </div>
                             </td>
 
-                            {/* Expected Close Date */}
-                            <td className="px-6 py-4">
+                            {/* Expected Close Date - Desktop Only */}
+                            <td className="hidden lg:table-cell px-6 py-4">
                               <div className="flex items-center">
                                 {opportunity.expectedCloseDate ? (
                                   <>
@@ -810,8 +872,8 @@ export const Opportunities: React.FC = () => {
                               </div>
                             </td>
 
-                            {/* Contacts */}
-                            <td className="px-6 py-4">
+                            {/* Contacts - Desktop Only */}
+                            <td className="hidden md:table-cell px-6 py-4">
                               <div className="flex items-center">
                                 <Users className="h-4 w-4 text-gray-400 mr-2" />
                                 <span className="text-sm text-gray-900">
@@ -827,7 +889,7 @@ export const Opportunities: React.FC = () => {
                             </td>
 
                             {/* Actions */}
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-3 sm:px-6 py-4 text-right">
                               <div className="flex items-center justify-end space-x-2">
                                 <button
                                   onClick={(e) => {
@@ -863,8 +925,8 @@ export const Opportunities: React.FC = () => {
         )}
       </div>
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50">
+      {/* Floating Action Buttons - Desktop */}
+      <div className="hidden md:flex fixed bottom-6 right-6 flex-col gap-3 z-50">
         {/* Export Button */}
         <button
           onClick={handleExportToExcel}
