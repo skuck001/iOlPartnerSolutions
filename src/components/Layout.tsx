@@ -253,7 +253,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       </div>
 
       {/* Main content */}
-      <div className="flex-1 bg-gray-50 lg:ml-64">
+      <div className="flex-1 bg-gray-50 lg:ml-64 h-screen">
         {children}
       </div>
     </div>

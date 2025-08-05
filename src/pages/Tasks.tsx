@@ -447,9 +447,9 @@ export const Tasks: React.FC = () => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Activities & Tasks</h1>
@@ -463,7 +463,7 @@ export const Tasks: React.FC = () => {
       </div>
 
       {/* Statistics Cards */}
-      <div className="px-6 py-4 bg-white border-b border-gray-200">
+      <div className="px-6 py-4 bg-white border-b border-gray-200 flex-shrink-0">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-red-50 rounded-lg p-4 border border-red-200">
             <div className="flex items-center justify-between">
@@ -516,11 +516,11 @@ export const Tasks: React.FC = () => {
       </div>
 
       {/* Main Content - 2 Column Layout */}
-      <div className="flex-1 flex overflow-hidden gap-6 p-6">
+      <div className="flex-1 flex gap-6 p-6 min-h-0">
         {/* Left Column - Calendar and Activities */}
-        <div className="flex-1 flex flex-col bg-white rounded-lg shadow-sm">
+        <div className="flex-1 flex flex-col bg-white rounded-lg shadow-sm min-h-0">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 rounded-t-lg">
+          <div className="px-6 py-4 border-b border-gray-200 rounded-t-lg flex-shrink-0">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <Calendar className="h-5 w-5 text-iol-red" />
               Activities & Tasks
@@ -534,7 +534,7 @@ export const Tasks: React.FC = () => {
 
           {/* 7-Day Calendar View */}
           {viewMode === 'scheduled' && (
-            <div className="px-6 py-3 bg-white border-b border-gray-200">
+            <div className="px-6 py-3 bg-white border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-medium text-gray-900">Next 7 Days</h3>
                 {selectedDate && (
@@ -595,7 +595,7 @@ export const Tasks: React.FC = () => {
           )}
 
                      {/* Search Bar and View Mode Toggle */}
-           <div className="px-6 py-3 bg-white border-b border-gray-200">
+           <div className="px-6 py-3 bg-white border-b border-gray-200 flex-shrink-0">
              <div className="flex items-center justify-between gap-4">
                <div className="relative max-w-md">
                  <input
@@ -639,9 +639,9 @@ export const Tasks: React.FC = () => {
            </div>
 
           {/* Activities Content */}
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {viewMode === 'scheduled' ? (
-              <div className="h-full overflow-auto p-6">
+              <div className="p-6">
                 <div className="space-y-6">
                   {Object.entries(groupedTasks).map(([groupKey, groupTasks]) => {
                     if (groupTasks.length === 0) return null;
@@ -757,7 +757,7 @@ export const Tasks: React.FC = () => {
                 </div>
               </div>
                          ) : viewMode === 'list' ? (
-               <div className="h-full overflow-auto p-6">
+               <div className="p-6">
                  <div className="space-y-6">
                    {Object.entries(groupTasksByOpportunity()).map(([opportunityKey, tasks]) => (
                      <div key={opportunityKey} className="bg-white rounded-lg border border-gray-200">
@@ -822,8 +822,8 @@ export const Tasks: React.FC = () => {
         </div>
 
         {/* Right Column - Opportunity To-Do Items */}
-        <div className="flex-1 bg-white rounded-lg shadow-sm flex flex-col">
-          <div className="px-6 py-4 border-b border-gray-200 rounded-t-lg">
+        <div className="flex-1 bg-white rounded-lg shadow-sm flex flex-col min-h-0">
+          <div className="px-6 py-4 border-b border-gray-200 rounded-t-lg flex-shrink-0">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <CheckSquare className="h-5 w-5 text-iol-red" />
               Opportunity To-Do Items
@@ -833,7 +833,7 @@ export const Tasks: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 min-h-0">
             {opportunitiesWithTodos.length > 0 ? (
               <div className="space-y-6">
                 {opportunitiesWithTodos.map(opportunity => (

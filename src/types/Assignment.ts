@@ -23,6 +23,7 @@ export interface Assignment {
   dueDate?: Date;
   ownerId: string;
   oneDriveLink?: string;
+  oneDriveTitle?: string;
   checklist: ChecklistItem[];
   progressLog: ProgressLogEntry[];
   createdAt: Timestamp;
@@ -36,6 +37,7 @@ export interface CreateAssignmentRequest {
   dueDate?: string; // ISO date string
   ownerId?: string;
   oneDriveLink?: string;
+  oneDriveTitle?: string;
   checklist?: Omit<ChecklistItem, 'id' | 'completedAt'>[];
   progressLog?: Omit<ProgressLogEntry, 'id' | 'timestamp'>[];
 }
@@ -48,6 +50,7 @@ export interface UpdateAssignmentRequest {
   dueDate?: string; // ISO date string
   ownerId?: string;
   oneDriveLink?: string;
+  oneDriveTitle?: string;
 }
 
 export interface AddChecklistItemRequest {
