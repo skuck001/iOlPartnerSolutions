@@ -18,6 +18,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { AuthStatusIndicator } from './AuthStatusIndicator';
 import type { User } from '../types';
 import { QuickAccess } from './QuickAccess';
 
@@ -83,9 +84,20 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [currentUser]);
 
   // Handle case where user becomes unauthenticated while on a protected page
+  // Add delay to avoid redirecting during auth state transitions
   useEffect(() => {
     if (!currentUser) {
-      navigate('/login', { replace: true });
+      const timeout = setTimeout(() => {
+        // Check if user is online before redirecting to avoid logout during network issues
+        if (navigator.onLine) {
+          console.log('Redirecting to login due to missing currentUser (online)');
+          navigate('/login', { replace: true });
+        } else {
+          console.log('Skipping login redirect - user is offline');
+        }
+      }, 2000); // 2 second delay to handle temporary auth state clearing
+
+      return () => clearTimeout(timeout);
     }
   }, [currentUser, navigate]);
 
@@ -256,6 +268,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <div className="flex-1 bg-gray-50 lg:ml-64 h-screen">
         {children}
       </div>
+      
+      {/* Auth Status Indicator */}
+      <AuthStatusIndicator />
     </div>
   );
 }; 

@@ -8,6 +8,7 @@ import type {
   User 
 } from '../types';
 import { useApi } from '../hooks/useApi';
+import { measureDataLoadTime } from '../utils/performance';
 
 // Cache interfaces
 interface DataCache {
@@ -290,6 +291,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   // Batch data loader for dashboard
   const loadAllData = useCallback(async () => {
     console.log('Loading all data using batch endpoint...');
+    const timer = measureDataLoadTime('Batch Data Load');
     
     try {
       // Use the new batch endpoint for better performance
@@ -323,6 +325,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
       if (data.tasks) setCache('tasks_{}', data.tasks);
       if (data.users) setCache('users_{"limit":100}', data.users);
 
+      timer.end(); // Measure successful load time
+      
       return {
         accounts: data.accounts || [],
         contacts: data.contacts || [],
@@ -332,6 +336,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
         users: data.users || []
       };
     } catch (error) {
+      timer.end(); // Measure even failed attempts
       console.warn('Batch endpoint failed, falling back to individual calls:', error);
       
       // Fallback to individual calls if batch fails
@@ -404,13 +409,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
     }
   }, [clearCache, getAccounts, getContacts, getOpportunities, getProducts, getTasks, getUsers, loadAllData]);
 
-  // Auto-load data when context mounts
+  // Auto-load data when context mounts (aggressive non-blocking)
   useEffect(() => {
     const initializeData = async () => {
       try {
         console.log('DataContext: Auto-loading initial data...');
-        await loadAllData();
-        console.log('DataContext: Initial data loaded successfully');
+        
+        // Skip initial data loading entirely - let components request data when needed
+        console.log('DataContext: Skipping auto-load to improve LCP - data will load on demand');
+        
       } catch (error) {
         console.error('DataContext: Error auto-loading initial data:', error);
       }

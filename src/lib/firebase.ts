@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator, enableNetwork, disableNetwork } from 'firebase/firestore';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 const firebaseConfig = {
@@ -39,6 +39,11 @@ if (typeof window !== 'undefined') {
       ...auth.settings,
       appVerificationDisabledForTesting: false
     };
+    
+    // Explicitly set auth persistence to ensure users stay logged in
+    setPersistence(auth, browserLocalPersistence).catch((error) => {
+      console.error('Failed to set auth persistence:', error);
+    });
     
   } catch (error) {
     console.warn('Firebase optimization setup failed:', error);

@@ -1,0 +1,41 @@
+/* Critical CSS for immediate LCP optimization */
+
+/* Ensure immediate visibility of key elements */
+.dashboard-header {
+  font-display: swap;
+  will-change: auto;
+}
+
+/* Optimize the LCP element specifically */
+.lcp-optimized {
+  content-visibility: auto;
+  contain-intrinsic-size: 20px;
+}
+
+/* Force immediate rendering of text content */
+.text-sm.text-gray-600 {
+  font-display: swap;
+  text-rendering: optimizeSpeed;
+}
+
+/* Prevent layout shifts */
+.dashboard-grid {
+  contain: layout style;
+}
+
+/* Optimize animations for performance */
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: opacity;
+}
+
+/* Preload critical styles */
+.min-h-screen {
+  min-height: 100vh;
+  contain: layout;
+}
+
+.bg-gray-50 {
+  background-color: #f9fafb;
+  contain: style;
+}
