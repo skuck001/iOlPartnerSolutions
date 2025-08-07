@@ -10,6 +10,7 @@ export type { User } from './User';
 export type { 
   Assignment, 
   AssignmentStatus, 
+  AssignmentActivity,
   ChecklistItem as AssignmentChecklistItem, 
   ProgressLogEntry, 
   CreateAssignmentRequest, 
@@ -18,4 +19,12 @@ export type {
   UpdateChecklistItemRequest,
   AddProgressLogEntryRequest,
   RemoveChecklistItemRequest
-} from './Assignment'; 
+} from './Assignment';
+export type { 
+  UnifiedTask, 
+  UnifiedTaskFilters, 
+  UnifiedTaskSortOptions, 
+  UnifiedTaskType, 
+  UnifiedTaskStatus, 
+  UnifiedTaskPriority 
+} from './UnifiedTask'; 

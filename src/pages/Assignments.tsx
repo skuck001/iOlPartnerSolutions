@@ -159,7 +159,7 @@ const Assignments: React.FC = () => {
     method: 'Document' as (typeof ASSIGNMENT_ACTIVITY_METHODS)[number],
     subject: '',
     notes: '',
-    assignedTo: currentUser?.uid || '',
+    assignedTo: currentUser?.uid || 'system',
     relatedContactIds: [] as string[],
     attachments: [] as string[],
     followUpNeeded: false,
@@ -344,7 +344,9 @@ const Assignments: React.FC = () => {
   };
 
   // Inline due date editing helpers
-  const handleQuickDueDate = (itemId: string, type: 'today' | 'tomorrow' | 'next-week') => {
+  const handleQuickDueDate = async (itemId: string, type: 'today' | 'tomorrow' | 'next-week') => {
+    if (!selectedAssignment) return;
+    
     const today = new Date();
     let dueDate: Date;
     
@@ -362,18 +364,52 @@ const Assignments: React.FC = () => {
         break;
     }
 
+    // Update local state immediately
     setEditChecklist(prev => prev.map(item =>
       item.id === itemId ? { ...item, dueDate } : item
     ));
+
+    // Persist to backend
+    try {
+      await updateChecklistItem({
+        taskId: selectedAssignment.taskId,
+        itemId: itemId,
+        dueDate: dueDate.toISOString()
+      });
+    } catch (error) {
+      console.error('Error updating checklist item due date:', error);
+      // Revert on error
+      setEditChecklist(prev => prev.map(item =>
+        item.id === itemId ? { ...selectedAssignment.checklist.find(i => i.id === itemId)! } : item
+      ));
+    }
   };
 
-  const handleInlineDueDateEdit = (itemId: string, dateStr: string) => {
+  const handleInlineDueDateEdit = async (itemId: string, dateStr: string) => {
+    if (!selectedAssignment) return;
+    
     const dueDate = dateStr ? new Date(dateStr) : undefined;
     
+    // Update local state immediately
     setEditChecklist(prev => prev.map(item =>
       item.id === itemId ? { ...item, dueDate } : item
     ));
     setEditingDueDate(null);
+
+    // Persist to backend
+    try {
+      await updateChecklistItem({
+        taskId: selectedAssignment.taskId,
+        itemId: itemId,
+        dueDate: dueDate ? dueDate.toISOString() : null // Use null to clear the date
+      });
+    } catch (error) {
+      console.error('Error updating checklist item due date:', error);
+      // Revert on error
+      setEditChecklist(prev => prev.map(item =>
+        item.id === itemId ? { ...selectedAssignment.checklist.find(i => i.id === itemId)! } : item
+      ));
+    }
   };
 
   const fetchAssignments = async () => {
@@ -530,6 +566,12 @@ const Assignments: React.FC = () => {
 
   const filteredAndSortedAssignments = (assignments || [])
     .filter(assignment => {
+      // Ensure assignment has required properties
+      if (!assignment || !assignment.title || !assignment.taskId) {
+        console.warn('Invalid assignment found:', assignment);
+        return false;
+      }
+      
       const matchesSearch = (
         assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         assignment.taskId.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -546,8 +588,8 @@ const Assignments: React.FC = () => {
       
       switch (sortField) {
         case 'title':
-          aValue = a.title.toLowerCase();
-          bValue = b.title.toLowerCase();
+          aValue = (a.title || '').toLowerCase();
+          bValue = (b.title || '').toLowerCase();
           break;
         case 'status':
           aValue = a.status;
@@ -810,13 +852,59 @@ const Assignments: React.FC = () => {
   const handleAddActivity = async () => {
     if (!selectedAssignment || !activityFormData.subject.trim()) return;
 
+    // Validate required fields before sending
+    if (!activityFormData.assignedTo || !currentUser?.uid) {
+      console.error('Missing assigned user');
+      return;
+    }
+
+    const activityData: any = {
+      taskId: selectedAssignment.taskId,
+      activityType: activityFormData.activityType,
+      dateTime: activityFormData.dateTime.toISOString(),
+      method: activityFormData.method,
+      subject: activityFormData.subject,
+      notes: activityFormData.notes || '', // Ensure notes is always a string
+      assignedTo: activityFormData.assignedTo || currentUser.uid, // Ensure assignedTo is not empty
+      relatedContactIds: activityFormData.relatedContactIds || [],
+      attachments: activityFormData.attachments || [],
+      followUpNeeded: Boolean(activityFormData.followUpNeeded), // Ensure it's always a boolean
+      status: activityFormData.status,
+      priority: activityFormData.priority,
+    };
+    
+    // Only add optional fields if they have values
+    if (activityFormData.followUpDate) {
+      activityData.followUpDate = activityFormData.followUpDate.toISOString();
+    }
+    if (activityFormData.followUpSubject) {
+      activityData.followUpSubject = activityFormData.followUpSubject;
+    }
+
+    console.log('📤 Sending activity data to backend:');
+    console.log('Raw form data:', activityFormData);
+    console.log('Processed activity data:', activityData);
+    
+    // Validate all required fields locally
+    const requiredFields = ['taskId', 'activityType', 'dateTime', 'method', 'subject', 'assignedTo', 'status'];
+    const missingFields = requiredFields.filter(field => {
+      const value = activityData[field as keyof typeof activityData];
+      return value === undefined || value === null || value === '';
+    });
+    
+    // Special check for boolean field
+    if (activityData.followUpNeeded === undefined || activityData.followUpNeeded === null) {
+      missingFields.push('followUpNeeded');
+    }
+    
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
+      alert(`Missing required fields: ${missingFields.join(', ')}`);
+      return;
+    }
+
     try {
-      await addActivityToAssignment({
-        taskId: selectedAssignment.taskId,
-        ...activityFormData,
-        dateTime: activityFormData.dateTime.toISOString(),
-        followUpDate: activityFormData.followUpDate?.toISOString()
-      });
+      await addActivityToAssignment(activityData);
 
       // Reset form and close
       setActivityFormData({
@@ -825,7 +913,7 @@ const Assignments: React.FC = () => {
         method: 'Document' as (typeof ASSIGNMENT_ACTIVITY_METHODS)[number],
         subject: '',
         notes: '',
-        assignedTo: currentUser?.uid || '',
+        assignedTo: currentUser?.uid || 'system',
         relatedContactIds: [],
         attachments: [],
         followUpNeeded: false,
@@ -838,8 +926,25 @@ const Assignments: React.FC = () => {
 
       // Refresh assignments to get updated data
       await getAssignments();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add activity:', err);
+      console.error('Error details:', JSON.stringify(err.details, null, 2));
+      console.error('Full error object:', JSON.stringify(err, null, 2));
+      
+      // Show detailed validation errors if available
+      if (err.message?.includes('Validation failed') && err.details?.errors) {
+        const errorMessages = err.details.errors.map((error: any) => 
+          `${error.field}: ${error.message}`
+        ).join('\n');
+        alert(`Validation errors:\n${errorMessages}`);
+      } else if (err.message?.includes('Validation failed')) {
+        // Try to extract validation details from different possible locations
+        const detailsStr = err.details ? JSON.stringify(err.details, null, 2) : 'No details available';
+        console.error('Validation failed but no errors array found. Details:', detailsStr);
+        alert(`Validation error: Please check all required fields are filled correctly.\n\nSee console for details.`);
+      } else {
+        alert('Failed to add activity. Please try again.');
+      }
     }
   };
 

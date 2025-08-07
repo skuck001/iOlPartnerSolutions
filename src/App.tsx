@@ -18,6 +18,7 @@ import { Tasks } from './pages/Tasks';
 import { TaskDetails } from './pages/TaskDetails';
 import { WeeklyReport } from './pages/WeeklyReport';
 import Assignments from './pages/Assignments';
+import { Planner } from './pages/Planner';
 
 import { UserProfile } from './pages/UserProfile';
 
@@ -148,6 +149,11 @@ function AppRoutes() {
       <Route path="/assignments" element={
         <ProtectedRoute>
           <Assignments />
+        </ProtectedRoute>
+      } />
+      <Route path="/planner" element={
+        <ProtectedRoute>
+          <Planner />
         </ProtectedRoute>
       } />
 

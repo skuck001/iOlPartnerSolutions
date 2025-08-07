@@ -261,15 +261,20 @@ export class AssignmentService {
       if (item.id === itemId) {
         const updatedItem = { ...item };
         
-        // Update fields only if they have values
-        if (updateData.text !== undefined && updateData.text !== null) {
+        // Update fields only if they are defined (allow null to clear values)
+        if (updateData.text !== undefined) {
           updatedItem.text = updateData.text;
         }
-        if (updateData.completed !== undefined && updateData.completed !== null) {
+        if (updateData.completed !== undefined) {
           updatedItem.completed = updateData.completed;
         }
-        if (updateData.dueDate !== undefined && updateData.dueDate !== null) {
-          updatedItem.dueDate = updateData.dueDate;
+        if (updateData.dueDate !== undefined) {
+          // If dueDate is null, remove it
+          if (updateData.dueDate === null) {
+            delete updatedItem.dueDate;
+          } else {
+            updatedItem.dueDate = updateData.dueDate;
+          }
         }
         
         // Set completedAt timestamp when marking as completed
@@ -488,14 +493,23 @@ export class AssignmentService {
     }
 
     const now = Timestamp.now();
+    
+    // Filter out null/undefined values from activityData
+    const cleanActivityData: any = {};
+    for (const [key, value] of Object.entries(activityData)) {
+      if (value !== null && value !== undefined) {
+        cleanActivityData[key] = value;
+      }
+    }
+    
     const newActivity: AssignmentActivity = {
-      ...activityData,
+      ...cleanActivityData,
       id: `activity_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       createdAt: now,
       createdBy: userId,
       updatedAt: now,
       updatedBy: userId
-    };
+    } as AssignmentActivity;
 
     const assignmentData = assignmentDoc.data();
     const activities = (assignmentData?.activities || []) as AssignmentActivity[];
